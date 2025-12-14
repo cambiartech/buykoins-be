@@ -15,6 +15,7 @@ import { BankAccountsModule } from './bank-accounts/bank-accounts.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { PayoutsModule } from './payouts/payouts.module';
 import { SettingsModule } from './settings/settings.module';
+import { SupportModule } from './support/support.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import databaseConfig from './config/database.config';
 import jwtConfig from './config/jwt.config';
@@ -64,6 +65,8 @@ import appConfig from './config/app.config';
     PayoutsModule,
     // Settings Module
     SettingsModule,
+    // Support Module
+    SupportModule,
   ],
   controllers: [AppController],
   providers: [

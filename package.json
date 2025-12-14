@@ -29,8 +29,10 @@
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.1.9",
+    "@nestjs/platform-socket.io": "^11.1.9",
     "@nestjs/swagger": "^11.2.3",
     "@nestjs/throttler": "^6.5.0",
+    "@nestjs/websockets": "^11.1.9",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.3",
@@ -43,6 +45,7 @@
     "rxjs": "^7.8.2",
     "sequelize": "^6.37.7",
     "sequelize-typescript": "^2.1.6",
+    "socket.io": "^4.8.1",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
@@ -57,6 +60,7 @@
     "@types/multer": "^2.0.0",
     "@types/node": "^22.19.1",
     "@types/passport-jwt": "^4.0.1",
+    "@types/socket.io": "^3.0.1",
     "@types/supertest": "^6.0.2",
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^8.48.1",

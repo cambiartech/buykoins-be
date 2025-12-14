@@ -27,23 +27,58 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
+    // Log payload for debugging in development
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 JWT Payload:', {
+        sub: payload.sub,
+        email: payload.email,
+        type: payload.type,
+        role: payload.role,
+      });
+    }
+
     if (payload.type === 'admin') {
       const admin = await Admin.findByPk(payload.sub);
-      if (!admin || admin.status !== AdminStatus.ACTIVE) {
-        throw new UnauthorizedException('Admin account not found or inactive');
+      
+      if (!admin) {
+        console.error('❌ Admin not found:', payload.sub);
+        throw new UnauthorizedException('Admin account not found');
       }
-        return {
+
+      if (admin.status !== AdminStatus.ACTIVE) {
+        console.error('❌ Admin inactive:', payload.sub, 'Status:', admin.status);
+        throw new UnauthorizedException(`Admin account is ${admin.status}`);
+      }
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log('✅ Admin authenticated:', {
           id: admin.id,
           email: admin.email,
           role: admin.role,
-          permissions: admin.permissions || [],
-          type: 'admin',
-        };
+          status: admin.status,
+        });
+      }
+
+      return {
+        id: admin.id,
+        email: admin.email,
+        role: admin.role,
+        permissions: admin.permissions || [],
+        type: 'admin',
+      };
     } else {
       const user = await User.findByPk(payload.sub);
-      if (!user || user.status !== UserStatus.ACTIVE) {
-        throw new UnauthorizedException('User account not found or inactive');
+      
+      if (!user) {
+        console.error('❌ User not found:', payload.sub);
+        throw new UnauthorizedException('User account not found');
       }
+
+      if (user.status !== UserStatus.ACTIVE) {
+        console.error('❌ User inactive:', payload.sub, 'Status:', user.status);
+        throw new UnauthorizedException(`User account is ${user.status}`);
+      }
+
       return {
         id: user.id,
         email: user.email,

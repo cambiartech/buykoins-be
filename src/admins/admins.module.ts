@@ -6,9 +6,10 @@ import { DatabaseModule } from '../database/database.module';
 import { AuthModule } from '../auth/auth.module';
 import { StorageModule } from '../storage/storage.module';
 import { EmailModule } from '../email/email.module';
+import { SupportModule } from '../support/support.module';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, StorageModule, EmailModule],
+  imports: [DatabaseModule, AuthModule, StorageModule, EmailModule, SupportModule],
   controllers: [AdminsController, AdminAuthController],
   providers: [AdminsService],
   exports: [AdminsService],

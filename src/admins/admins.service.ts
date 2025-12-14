@@ -26,6 +26,9 @@ import { DEFAULT_ADMIN_PERMISSIONS, PermissionGroups, ALL_PERMISSIONS } from './
 import { PasswordUtil } from '../auth/utils/password.util';
 import { EmailService } from '../email/email.service';
 import { VerificationCodeUtil } from '../auth/utils/verification-code.util';
+import { SupportConversation, ConversationStatus } from '../support/entities/support-conversation.entity';
+import { SupportMessage, SenderType } from '../support/entities/support-message.entity';
+import { SupportService } from '../support/support.service';
 
 @Injectable()
 export class AdminsService {
@@ -33,6 +36,7 @@ export class AdminsService {
     @Inject('SEQUELIZE') private sequelize: Sequelize,
     private storageService: StorageService,
     private emailService: EmailService,
+    private supportService: SupportService,
   ) {}
 
   /**
@@ -1699,16 +1703,6 @@ export class AdminsService {
   }
 
   /**
-   * Get available permissions list
-   */
-  async getAvailablePermissions() {
-    return {
-      permissions: ALL_PERMISSIONS,
-      groups: PermissionGroups,
-    };
-  }
-
-  /**
    * Request OTP for password change
    */
   async requestPasswordChangeOtp(adminId: string) {
@@ -1836,6 +1830,444 @@ export class AdminsService {
     return {
       message: 'Password updated successfully',
     };
+  }
+
+  /**
+   * Get available permissions
+   */
+  async getAvailablePermissions() {
+    return {
+      permissions: ALL_PERMISSIONS,
+      groups: PermissionGroups,
+      defaultAdminPermissions: DEFAULT_ADMIN_PERMISSIONS,
+    };
+  }
+
+  /**
+   * Get admin dashboard overview with actionable items
+   */
+  async getDashboardOverview() {
+    // Get summary statistics
+    const [
+      pendingCreditRequestsCount,
+      pendingOnboardingCount,
+      pendingPayoutsCount,
+      totalUsersCount,
+      totalTransactionsCount,
+    ] = await Promise.all([
+      CreditRequest.count({ where: { status: CreditRequestStatus.PENDING } }),
+      OnboardingRequest.count({ where: { status: OnboardingRequestStatus.PENDING } }),
+      Payout.count({ where: { status: PayoutStatus.PENDING } }),
+      User.count({ where: { status: UserStatus.ACTIVE } }),
+      Transaction.count(),
+    ]);
+
+    // Get recent support conversations with unread messages
+    const recentSupportConversations = await SupportConversation.findAll({
+      where: {
+        status: ConversationStatus.OPEN,
+      },
+      include: [
+        { association: 'user', required: false },
+      ],
+      order: [['lastMessageAt', 'DESC NULLS LAST'], ['createdAt', 'DESC']],
+      limit: 10,
+    });
+
+    // Calculate unread counts for each conversation
+    const supportConversationsWithUnread = await Promise.all(
+      recentSupportConversations.map(async (conv) => {
+        // Get unread count for this specific conversation
+        const convUnreadCount = await this.sequelize.query(
+          `SELECT COUNT(*) as count
+           FROM support_messages
+           WHERE conversation_id = :conversationId
+             AND sender_type IN (:senderTypes)
+             AND is_read = false`,
+          {
+            replacements: {
+              conversationId: conv.id,
+              senderTypes: [SenderType.USER, SenderType.GUEST],
+            },
+            type: QueryTypes.SELECT,
+          },
+        ) as any[];
+
+        const unread = parseInt(convUnreadCount[0]?.count || '0', 10);
+
+        return {
+          id: conv.id,
+          conversationId: conv.id, // For navigation
+          type: conv.type,
+          status: conv.status,
+          userId: conv.userId,
+          guestId: conv.guestId,
+          user: conv.user
+            ? {
+                id: conv.user.id,
+                email: conv.user.email,
+                firstName: conv.user.firstName,
+                lastName: conv.user.lastName,
+                username: conv.user.username,
+              }
+            : null,
+          unreadCount: unread,
+          lastMessageAt: conv.lastMessageAt ? new Date(conv.lastMessageAt).toISOString() : null,
+          createdAt: conv.createdAt ? new Date(conv.createdAt).toISOString() : null,
+        };
+      }),
+    );
+
+    // Filter to only conversations with unread messages
+    const newSupportMessages = supportConversationsWithUnread.filter((conv) => conv.unreadCount > 0);
+
+    // Get recent pending onboarding requests
+    const recentOnboardingRequests = await OnboardingRequest.findAll({
+      where: {
+        status: OnboardingRequestStatus.PENDING,
+      },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'email', 'firstName', 'lastName', 'username', 'phone'],
+        },
+      ],
+      order: [['submittedAt', 'DESC']],
+      limit: 10,
+    });
+
+    const onboardingRequests = recentOnboardingRequests.map((req) => ({
+      id: req.id,
+      onboardingRequestId: req.id, // For navigation
+      userId: req.userId,
+      user: req.user
+        ? {
+            id: req.user.id,
+            email: req.user.email,
+            firstName: req.user.firstName,
+            lastName: req.user.lastName,
+            username: req.user.username,
+            phone: req.user.phone,
+          }
+        : null,
+      message: req.message,
+      submittedAt: req.submittedAt ? new Date(req.submittedAt).toISOString() : null,
+      createdAt: req.createdAt ? new Date(req.createdAt).toISOString() : null,
+    }));
+
+    // Get recent pending payout requests
+    const recentPayoutRequests = await Payout.findAll({
+      where: {
+        status: PayoutStatus.PENDING,
+      },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'email', 'firstName', 'lastName', 'username', 'phone', 'balance'],
+        },
+      ],
+      order: [['requestedAt', 'DESC']],
+      limit: 10,
+    });
+
+    const payoutRequests = recentPayoutRequests.map((payout) => ({
+      id: payout.id,
+      payoutId: payout.id, // For navigation
+      userId: payout.userId,
+      user: payout.user
+        ? {
+            id: payout.user.id,
+            email: payout.user.email,
+            firstName: payout.user.firstName,
+            lastName: payout.user.lastName,
+            username: payout.user.username,
+            phone: payout.user.phone,
+            balance: Number(payout.user.balance),
+          }
+        : null,
+      amount: Number(payout.amount),
+      amountInNgn: Number(payout.amountInNgn),
+      processingFee: Number(payout.processingFee),
+      netAmount: Number(payout.netAmount),
+      bankAccount: payout.bankAccount,
+      requestedAt: payout.requestedAt ? new Date(payout.requestedAt).toISOString() : null,
+      createdAt: payout.createdAt ? new Date(payout.createdAt).toISOString() : null,
+    }));
+
+    // Get recent pending credit requests
+    const recentCreditRequests = await CreditRequest.findAll({
+      where: {
+        status: CreditRequestStatus.PENDING,
+      },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'email', 'firstName', 'lastName', 'username', 'phone', 'balance'],
+        },
+      ],
+      order: [['submittedAt', 'DESC']],
+      limit: 10,
+    });
+
+    const creditRequests = recentCreditRequests.map((req) => ({
+      id: req.id,
+      creditRequestId: req.id, // For navigation
+      userId: req.userId,
+      user: req.user
+        ? {
+            id: req.user.id,
+            email: req.user.email,
+            firstName: req.user.firstName,
+            lastName: req.user.lastName,
+            username: req.user.username,
+            phone: req.user.phone,
+            balance: Number(req.user.balance),
+          }
+        : null,
+      amount: Number(req.amount),
+      proofUrl: req.proofUrl,
+      submittedAt: req.submittedAt ? new Date(req.submittedAt).toISOString() : null,
+      createdAt: req.createdAt ? new Date(req.createdAt).toISOString() : null,
+    }));
+
+    // Fraud Detection: Find users with suspicious activity
+    const fraudAlerts = await this.detectFraudPatterns();
+
+    return {
+      summary: {
+        pendingCreditRequests: pendingCreditRequestsCount,
+        pendingOnboarding: pendingOnboardingCount,
+        pendingPayouts: pendingPayoutsCount,
+        totalUsers: totalUsersCount,
+        totalTransactions: totalTransactionsCount,
+      },
+      newSupportMessages: newSupportMessages,
+      newOnboardingRequests: onboardingRequests,
+      newPayoutRequests: payoutRequests,
+      newCreditRequests: creditRequests,
+      fraudAlerts: fraudAlerts,
+    };
+  }
+
+  /**
+   * Detect fraud patterns and suspicious activity
+   */
+  private async detectFraudPatterns(): Promise<any[]> {
+    const fraudAlerts: any[] = [];
+
+    // 1. Users with too many pending credit requests (more than 3)
+    const usersWithMultipleCreditRequests = await this.sequelize.query(
+      `SELECT 
+        user_id,
+        COUNT(*) as pending_count
+      FROM credit_requests
+      WHERE status = 'pending'
+      GROUP BY user_id
+      HAVING COUNT(*) > 3
+      ORDER BY pending_count DESC
+      LIMIT 10`,
+      {
+        type: QueryTypes.SELECT,
+      },
+    ) as any[];
+
+    for (const alert of usersWithMultipleCreditRequests) {
+      const user = await User.findByPk(alert.user_id, {
+        attributes: ['id', 'email', 'firstName', 'lastName', 'username', 'phone'],
+      });
+
+      if (user) {
+        fraudAlerts.push({
+          type: 'multiple_pending_credit_requests',
+          severity: 'high',
+          message: `User has ${alert.pending_count} pending credit requests`,
+          userId: user.id,
+          user: {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            username: user.username,
+          },
+          count: alert.pending_count,
+          action: 'Review credit requests',
+          link: `/admin/credit-requests?userId=${user.id}`,
+        });
+      }
+    }
+
+    // 2. Users with too many rejected credit requests (potential abuse)
+    const usersWithManyRejections = await this.sequelize.query(
+      `SELECT 
+        user_id,
+        COUNT(*) as rejected_count
+      FROM credit_requests
+      WHERE status = 'rejected'
+        AND submitted_at >= NOW() - INTERVAL '30 days'
+      GROUP BY user_id
+      HAVING COUNT(*) > 5
+      ORDER BY rejected_count DESC
+      LIMIT 10`,
+      {
+        type: QueryTypes.SELECT,
+      },
+    ) as any[];
+
+    for (const alert of usersWithManyRejections) {
+      const user = await User.findByPk(alert.user_id, {
+        attributes: ['id', 'email', 'firstName', 'lastName', 'username', 'phone'],
+      });
+
+      if (user) {
+        fraudAlerts.push({
+          type: 'multiple_rejected_credit_requests',
+          severity: 'medium',
+          message: `User has ${alert.rejected_count} rejected credit requests in the last 30 days`,
+          userId: user.id,
+          user: {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            username: user.username,
+          },
+          count: alert.rejected_count,
+          action: 'Review user activity',
+          link: `/admin/users/${user.id}`,
+        });
+      }
+    }
+
+    // 3. Users with too many pending payouts (more than 2)
+    const usersWithMultiplePayouts = await this.sequelize.query(
+      `SELECT 
+        user_id,
+        COUNT(*) as pending_count
+      FROM payouts
+      WHERE status = 'pending'
+      GROUP BY user_id
+      HAVING COUNT(*) > 2
+      ORDER BY pending_count DESC
+      LIMIT 10`,
+      {
+        type: QueryTypes.SELECT,
+      },
+    ) as any[];
+
+    for (const alert of usersWithMultiplePayouts) {
+      const user = await User.findByPk(alert.user_id, {
+        attributes: ['id', 'email', 'firstName', 'lastName', 'username', 'phone'],
+      });
+
+      if (user) {
+        fraudAlerts.push({
+          type: 'multiple_pending_payouts',
+          severity: 'medium',
+          message: `User has ${alert.pending_count} pending payout requests`,
+          userId: user.id,
+          user: {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            username: user.username,
+          },
+          count: alert.pending_count,
+          action: 'Review payout requests',
+          link: `/admin/payouts?userId=${user.id}`,
+        });
+      }
+    }
+
+    // 4. Users with rapid credit requests (multiple in short time)
+    const rapidCreditRequests = await this.sequelize.query(
+      `SELECT 
+        user_id,
+        COUNT(*) as request_count,
+        MIN(submitted_at) as first_request,
+        MAX(submitted_at) as last_request
+      FROM credit_requests
+      WHERE submitted_at >= NOW() - INTERVAL '24 hours'
+      GROUP BY user_id
+      HAVING COUNT(*) > 3
+      ORDER BY request_count DESC
+      LIMIT 10`,
+      {
+        type: QueryTypes.SELECT,
+      },
+    ) as any[];
+
+    for (const alert of rapidCreditRequests) {
+      const user = await User.findByPk(alert.user_id, {
+        attributes: ['id', 'email', 'firstName', 'lastName', 'username', 'phone'],
+      });
+
+      if (user) {
+        fraudAlerts.push({
+          type: 'rapid_credit_requests',
+          severity: 'high',
+          message: `User submitted ${alert.request_count} credit requests in the last 24 hours`,
+          userId: user.id,
+          user: {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            username: user.username,
+          },
+          count: alert.request_count,
+          timeWindow: '24 hours',
+          action: 'Review for potential abuse',
+          link: `/admin/credit-requests?userId=${user.id}`,
+        });
+      }
+    }
+
+    // 5. Users with large credit requests (potential fraud)
+    const largeCreditRequests = await CreditRequest.findAll({
+      where: {
+        status: CreditRequestStatus.PENDING,
+        amount: {
+          [Op.gte]: 10000, // $10,000 or more
+        },
+      },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'email', 'firstName', 'lastName', 'username', 'phone'],
+        },
+      ],
+      order: [['amount', 'DESC']],
+      limit: 10,
+    });
+
+    for (const req of largeCreditRequests) {
+      if (req.user) {
+        fraudAlerts.push({
+          type: 'large_credit_request',
+          severity: 'medium',
+          message: `Large credit request: $${Number(req.amount).toLocaleString()}`,
+          userId: req.userId,
+          creditRequestId: req.id,
+          user: {
+            id: req.user.id,
+            email: req.user.email,
+            firstName: req.user.firstName,
+            lastName: req.user.lastName,
+            username: req.user.username,
+          },
+          amount: Number(req.amount),
+          action: 'Review large request',
+          link: `/admin/credit-requests/${req.id}`,
+        });
+      }
+    }
+
+    return fraudAlerts;
   }
 }
 

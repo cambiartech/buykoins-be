@@ -10,6 +10,10 @@ import { Payout } from '../payouts/entities/payout.entity';
 import { Transaction } from '../transactions/entities/transaction.entity';
 import { BankAccount } from '../bank-accounts/entities/bank-account.entity';
 import { PlatformSettings } from '../settings/entities/platform-settings.entity';
+import { SupportConversation } from '../support/entities/support-conversation.entity';
+import { SupportMessage } from '../support/entities/support-message.entity';
+import { OnboardingAuthCode } from '../support/entities/onboarding-auth-code.entity';
+import { CallRequest } from '../support/entities/call-request.entity';
 
 @Global()
 @Module({
@@ -42,6 +46,10 @@ import { PlatformSettings } from '../settings/entities/platform-settings.entity'
             Transaction,
             BankAccount,
             PlatformSettings,
+            SupportConversation,
+            SupportMessage,
+            OnboardingAuthCode,
+            CallRequest,
           ],
         });
         

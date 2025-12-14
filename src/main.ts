@@ -5,6 +5,7 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { ConfigService } from '@nestjs/config';
+import { SocketIOAdapter } from './support/socket-io.adapter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -19,7 +20,12 @@ async function bootstrap() {
   app.enableCors({
     origin: corsOrigin,
     credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
   });
+
+  // WebSocket Adapter Configuration
+  const socketAdapter = new SocketIOAdapter(app, configService);
+  app.useWebSocketAdapter(socketAdapter);
 
   // Global Validation Pipe
   app.useGlobalPipes(

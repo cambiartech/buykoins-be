@@ -51,6 +51,21 @@ import { RejectPayoutDto } from './dto/reject-payout.dto';
 export class AdminsController {
   constructor(private readonly adminsService: AdminsService) {}
 
+  @Get('dashboard')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get admin dashboard overview with actionable items' })
+  @ApiResponse({
+    status: 200,
+    description: 'Dashboard overview retrieved successfully',
+  })
+  async getDashboardOverview() {
+    const data = await this.adminsService.getDashboardOverview();
+    return {
+      success: true,
+      data,
+    };
+  }
+
   @Get('credit-requests')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get all credit requests' })
