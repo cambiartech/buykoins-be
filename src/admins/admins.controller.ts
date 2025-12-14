@@ -37,6 +37,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
 import { ApproveCreditRequestDto } from './dto/approve-credit-request.dto';
 import { RejectCreditRequestDto } from './dto/reject-credit-request.dto';
 import { CompleteOnboardingDto } from './dto/complete-onboarding.dto';
@@ -149,7 +150,7 @@ export class AdminsController {
   @ApiResponse({ status: 400, description: 'Credit request already processed or user has no bank account' })
   async approveCreditRequest(
     @Param('id') id: string,
-    @CurrentUser() admin: any,
+    @CurrentUser() admin: CurrentUserPayload,
     @Body() approveDto: ApproveCreditRequestDto,
     @UploadedFile(
       new ParseFilePipe({
@@ -201,7 +202,7 @@ export class AdminsController {
   @ApiResponse({ status: 400, description: 'Credit request already processed' })
   async rejectCreditRequest(
     @Param('id') id: string,
-    @CurrentUser() admin: any,
+    @CurrentUser() admin: CurrentUserPayload,
     @Body() rejectDto: RejectCreditRequestDto,
   ) {
     const data = await this.adminsService.rejectCreditRequest(
@@ -317,7 +318,7 @@ export class AdminsController {
   @ApiResponse({ status: 400, description: 'User already onboarded' })
   async completeOnboarding(
     @Param('id') id: string,
-    @CurrentUser() admin: any,
+    @CurrentUser() admin: CurrentUserPayload,
     @Body() completeDto: CompleteOnboardingDto,
   ) {
     const data = await this.adminsService.completeOnboarding(
@@ -428,7 +429,7 @@ export class AdminsController {
   @ApiResponse({ status: 400, description: 'Payout already processed or insufficient balance' })
   async processPayout(
     @Param('id') id: string,
-    @CurrentUser() admin: any,
+    @CurrentUser() admin: CurrentUserPayload,
     @Body() processDto: ProcessPayoutDto,
   ) {
     const data = await this.adminsService.processPayout(id, admin.id, processDto);
@@ -450,7 +451,7 @@ export class AdminsController {
   @ApiResponse({ status: 400, description: 'Payout already processed' })
   async rejectPayout(
     @Param('id') id: string,
-    @CurrentUser() admin: any,
+    @CurrentUser() admin: CurrentUserPayload,
     @Body() rejectDto: RejectPayoutDto,
   ) {
     const data = await this.adminsService.rejectPayout(id, admin.id, rejectDto);
@@ -713,7 +714,7 @@ export class AdminsController {
   @Roles('super_admin')
   async createAdmin(
     @Body() createDto: CreateAdminDto,
-    @CurrentUser() admin: any,
+    @CurrentUser() admin: CurrentUserPayload,
   ) {
     const data = await this.adminsService.createAdmin(createDto, admin.id);
     return {
@@ -735,7 +736,7 @@ export class AdminsController {
   async updateAdmin(
     @Param('id') id: string,
     @Body() updateDto: UpdateAdminDto,
-    @CurrentUser() admin: any,
+    @CurrentUser() admin: CurrentUserPayload,
   ) {
     const data = await this.adminsService.updateAdmin(id, updateDto, admin.id);
     return {
@@ -757,7 +758,7 @@ export class AdminsController {
   @Roles('super_admin')
   async suspendAdmin(
     @Param('id') id: string,
-    @CurrentUser() admin: any,
+    @CurrentUser() admin: CurrentUserPayload,
     @Body('reason') reason?: string,
   ) {
     const data = await this.adminsService.suspendAdmin(id, admin.id, reason);
