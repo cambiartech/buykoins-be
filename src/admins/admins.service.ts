@@ -282,7 +282,7 @@ export class AdminsService {
 
       await transaction.commit();
 
-      const response: any = {
+      const response = {
         id: creditRequest.id,
         status: creditRequest.status,
         processedAt: creditRequest.processedAt,
@@ -291,17 +291,12 @@ export class AdminsService {
         amount: creditAmount,
         userBalance: Number(user.balance),
         adminProofUrl,
-      };
-
-      if (creditMethod === CreditMethod.DIRECT && primaryBankAccount) {
-        response.bankAccount = {
+        bankAccount: creditMethod === CreditMethod.DIRECT && primaryBankAccount ? {
           bankName: primaryBankAccount.bankName,
           accountNumber: primaryBankAccount.accountNumber,
           accountName: primaryBankAccount.accountName,
-        };
-      } else {
-        response.bankAccount = null;
-      }
+        } : null,
+      };
 
       return response;
     } catch (error) {
@@ -371,7 +366,7 @@ export class AdminsService {
 
     // Search functionality
     if (search) {
-      const { Op } = require('sequelize');
+      // Using Op from sequelize (already imported at top)
       where[Op.or] = [
         { email: { [Op.iLike]: `%${search}%` } },
         { firstName: { [Op.iLike]: `%${search}%` } },
