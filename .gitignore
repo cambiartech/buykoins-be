@@ -107,3 +107,10 @@ temp/
 
 *.md
 .md
+
+# Deployment sensitive files
+.env.prod
+.env.production
+deploy/*.pem
+deploy/aws-config.env
+deploy/*.key
