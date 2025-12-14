@@ -19,15 +19,13 @@ import { StorageService } from '../storage/storage.service';
 import { Payout, PayoutStatus } from '../payouts/entities/payout.entity';
 import { ProcessPayoutDto } from './dto/process-payout.dto';
 import { RejectPayoutDto } from './dto/reject-payout.dto';
-import { CreateAdminDto } from './dto/create-admin.dto';
-import { UpdateAdminDto } from './dto/update-admin.dto';
 import { Admin, AdminRole, AdminStatus } from './entities/admin.entity';
 import { DEFAULT_ADMIN_PERMISSIONS, PermissionGroups, ALL_PERMISSIONS } from './permissions.constants';
 import { PasswordUtil } from '../auth/utils/password.util';
 import { EmailService } from '../email/email.service';
 import { VerificationCodeUtil } from '../auth/utils/verification-code.util';
 import { SupportConversation, ConversationStatus } from '../support/entities/support-conversation.entity';
-import { SupportMessage, SenderType } from '../support/entities/support-message.entity';
+import { SenderType } from '../support/entities/support-message.entity';
 import { SupportService } from '../support/support.service';
 
 @Injectable()
@@ -46,7 +44,7 @@ export class AdminsService {
     const offset = (page - 1) * limit;
     const maxLimit = Math.min(limit, 50); // Max 50 per page
 
-    const where: any = {};
+    const where: { status?: string } = {};
     if (status && status !== 'all') {
       where.status = status;
     }
