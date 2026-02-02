@@ -1906,7 +1906,7 @@ export class AdminsService {
         replacements: { adminId },
         type: QueryTypes.SELECT,
       },
-    ) as any[];
+    ) as Array<{ password_change_otp: string | null; password_change_otp_expires_at: Date | null }>;
 
     const dbOtp = result[0]?.password_change_otp;
     const dbOtpExpiresAt = result[0]?.password_change_otp_expires_at;
@@ -2021,9 +2021,9 @@ export class AdminsService {
             },
             type: QueryTypes.SELECT,
           },
-        ) as any[];
+        ) as Array<{ count: string | number }>;
 
-        const unread = parseInt(convUnreadCount[0]?.count || '0', 10);
+        const unread = parseInt(String(convUnreadCount[0]?.count || '0'), 10);
 
         return {
           id: conv.id,
@@ -2206,10 +2206,10 @@ export class AdminsService {
       {
         type: QueryTypes.SELECT,
       },
-    ) as any[];
+    ) as Array<{ user_id: string; pending_count: string | number }>;
 
     for (const alert of usersWithMultipleCreditRequests) {
-      const user = await User.findByPk(alert.user_id, {
+      const user = await User.findByPk(String(alert.user_id), {
         attributes: ['id', 'email', 'firstName', 'lastName', 'username', 'phone'],
       });
 
@@ -2226,7 +2226,7 @@ export class AdminsService {
             lastName: user.lastName,
             username: user.username,
           },
-          count: alert.pending_count,
+          count: Number(alert.pending_count),
           action: 'Review credit requests',
           link: `/admin/credit-requests?userId=${user.id}`,
         });
@@ -2248,10 +2248,10 @@ export class AdminsService {
       {
         type: QueryTypes.SELECT,
       },
-    ) as any[];
+    ) as Array<{ user_id: string; rejected_count: string | number }>;
 
     for (const alert of usersWithManyRejections) {
-      const user = await User.findByPk(alert.user_id, {
+      const user = await User.findByPk(String(alert.user_id), {
         attributes: ['id', 'email', 'firstName', 'lastName', 'username', 'phone'],
       });
 
@@ -2268,7 +2268,7 @@ export class AdminsService {
             lastName: user.lastName,
             username: user.username,
           },
-          count: alert.rejected_count,
+          count: Number(alert.rejected_count),
           action: 'Review user activity',
           link: `/admin/users/${user.id}`,
         });
@@ -2289,10 +2289,10 @@ export class AdminsService {
       {
         type: QueryTypes.SELECT,
       },
-    ) as any[];
+    ) as Array<{ user_id: string; pending_count: string | number }>;
 
     for (const alert of usersWithMultiplePayouts) {
-      const user = await User.findByPk(alert.user_id, {
+      const user = await User.findByPk(String(alert.user_id), {
         attributes: ['id', 'email', 'firstName', 'lastName', 'username', 'phone'],
       });
 
@@ -2309,7 +2309,7 @@ export class AdminsService {
             lastName: user.lastName,
             username: user.username,
           },
-          count: alert.pending_count,
+          count: Number(alert.pending_count),
           action: 'Review payout requests',
           link: `/admin/payouts?userId=${user.id}`,
         });
@@ -2332,10 +2332,10 @@ export class AdminsService {
       {
         type: QueryTypes.SELECT,
       },
-    ) as any[];
+    ) as Array<{ user_id: string; request_count: string | number }>;
 
     for (const alert of rapidCreditRequests) {
-      const user = await User.findByPk(alert.user_id, {
+      const user = await User.findByPk(String(alert.user_id), {
         attributes: ['id', 'email', 'firstName', 'lastName', 'username', 'phone'],
       });
 
@@ -2352,7 +2352,7 @@ export class AdminsService {
             lastName: user.lastName,
             username: user.username,
           },
-          count: alert.request_count,
+          count: Number(alert.request_count),
           timeWindow: '24 hours',
           action: 'Review for potential abuse',
           link: `/admin/credit-requests?userId=${user.id}`,

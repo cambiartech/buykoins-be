@@ -53,9 +53,9 @@ export class SupportService {
         },
         type: QueryTypes.SELECT,
       },
-    ) as any[];
+    ) as Array<{ count: string | number }>;
 
-    return parseInt(result[0]?.count || '0', 10);
+    return parseInt(String(result[0]?.count || '0'), 10);
   }
 
   /**
@@ -74,9 +74,9 @@ export class SupportService {
         },
         type: QueryTypes.SELECT,
       },
-    ) as any[];
+    ) as Array<{ count: string | number }>;
 
-    return parseInt(result[0]?.count || '0', 10);
+    return parseInt(String(result[0]?.count || '0'), 10);
   }
 
   /**
@@ -303,7 +303,7 @@ export class SupportService {
         },
         type: QueryTypes.SELECT,
       },
-    ) as any[];
+    ) as Array<{ id: string }>;
 
     const messageId = result[0]?.id;
     if (!messageId) {
