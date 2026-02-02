@@ -62,11 +62,11 @@ export class PayoutsService {
       );
     }
 
-    // Check if user has sufficient balance
-    const currentBalance = Number(user.balance);
-    if (currentBalance < createDto.amount) {
+    // Check if user has sufficient earnings
+    const currentEarnings = Number(user.earnings || 0);
+    if (currentEarnings < createDto.amount) {
       throw new BadRequestException(
-        `Insufficient balance. Your current balance is $${currentBalance.toFixed(2)}`,
+        `Insufficient balance. Your current balance is $${currentEarnings.toFixed(2)}`,
       );
     }
 

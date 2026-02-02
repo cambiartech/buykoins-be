@@ -304,23 +304,31 @@ export class AuthService {
 
       const user = await User.findOne({ where: { email } });
       if (!user) {
-        throw new UnauthorizedException('Invalid credentials');
+        const exception = new UnauthorizedException('Invalid credentials');
+        (exception as any).errorCode = 'AUTH_CREDENTIALS_INVALID';
+        throw exception;
       }
 
       // Check if email is verified
       if (!user.emailVerified) {
-        throw new UnauthorizedException('Please verify your email before logging in');
+        const exception = new UnauthorizedException('Please verify your email before logging in');
+        (exception as any).errorCode = 'AUTH_EMAIL_NOT_VERIFIED';
+        throw exception;
       }
 
       // Check if user is suspended
       if (user.status === UserStatus.SUSPENDED) {
-        throw new UnauthorizedException('Account has been suspended');
+        const exception = new UnauthorizedException('Account has been suspended');
+        (exception as any).errorCode = 'AUTH_ACCOUNT_SUSPENDED';
+        throw exception;
       }
 
       // Verify password
       const isPasswordValid = await PasswordUtil.compare(password, user.password);
       if (!isPasswordValid) {
-        throw new UnauthorizedException('Invalid credentials');
+        const exception = new UnauthorizedException('Invalid credentials');
+        (exception as any).errorCode = 'AUTH_CREDENTIALS_INVALID';
+        throw exception;
       }
 
       // Generate tokens
@@ -340,7 +348,9 @@ export class AuthService {
           lastName: user.lastName || null,
           phone: user.phone || null,
           onboardingStatus: user.onboardingStatus,
-          balance: parseFloat(user.balance?.toString() || '0'),
+          earnings: parseFloat(user.earnings?.toString() || '0'),
+          wallet: parseFloat(user.wallet?.toString() || '0'),
+          balance: parseFloat(user.earnings?.toString() || '0'), // Backward compatibility
           emailVerified: user.emailVerified,
         },
       };

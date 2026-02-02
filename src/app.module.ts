@@ -16,18 +16,23 @@ import { OnboardingModule } from './onboarding/onboarding.module';
 import { PayoutsModule } from './payouts/payouts.module';
 import { SettingsModule } from './settings/settings.module';
 import { SupportModule } from './support/support.module';
+import { WidgetModule } from './widget/widget.module';
+import { CardsModule } from './cards/cards.module';
+import { PaymentsModule } from './payments/payments.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import databaseConfig from './config/database.config';
 import jwtConfig from './config/jwt.config';
 import awsConfig from './config/aws.config';
 import appConfig from './config/app.config';
+import sudoConfig from './config/sudo.config';
+import paystackConfig from './config/paystack.config';
 
 @Module({
   imports: [
     // Configuration Module
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [databaseConfig, jwtConfig, awsConfig, appConfig],
+      load: [databaseConfig, jwtConfig, awsConfig, appConfig, sudoConfig, paystackConfig],
       envFilePath: ['.env.local', '.env'],
     }),
     // Rate Limiting
@@ -67,6 +72,12 @@ import appConfig from './config/app.config';
     SettingsModule,
     // Support Module
     SupportModule,
+    // Widget Module
+    WidgetModule,
+    // Cards Module
+    CardsModule,
+    // Payments Module
+    PaymentsModule,
   ],
   controllers: [AppController],
   providers: [

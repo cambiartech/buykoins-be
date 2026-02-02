@@ -56,7 +56,7 @@ export class UsersService {
       where: { userId },
       order: [['date', 'DESC']],
       limit: 10,
-      attributes: ['id', 'type', 'amount', 'status', 'description', 'date', 'referenceId'],
+      attributes: ['id', 'type', 'amount', 'amountInNgn', 'status', 'description', 'date', 'referenceId'],
     });
 
     // Get recent credit requests (last 5) for recent activities
@@ -100,15 +100,44 @@ export class UsersService {
         referenceId: payout.id,
       })),
       // Add transactions as activities
-      ...recentTransactions.map((txn) => ({
-        id: txn.id,
-        type: txn.type,
-        amount: Number(txn.amount),
-        date: txn.date,
-        status: txn.status,
-        description: txn.description,
-        referenceId: txn.referenceId,
-      })),
+      ...recentTransactions.map((txn) => {
+        // Determine currency based on transaction type and amountInNgn
+        let currency = 'USD'; // Default
+        
+        // NGN transactions (wallet-related)
+        if (
+          txn.type === TransactionType.DEPOSIT ||
+          txn.type === TransactionType.CARD_FUNDING ||
+          txn.type === TransactionType.TRANSFER_EARNINGS_TO_WALLET ||
+          txn.type === TransactionType.CARD_PURCHASE
+        ) {
+          currency = 'NGN';
+        }
+        // If amountInNgn is present, it's definitely NGN
+        else if (txn.amountInNgn !== null && txn.amountInNgn !== undefined) {
+          currency = 'NGN';
+        }
+        // USD transactions (earnings-related)
+        else if (
+          txn.type === TransactionType.CREDIT ||
+          txn.type === TransactionType.WITHDRAWAL ||
+          txn.type === TransactionType.PAYOUT
+        ) {
+          currency = 'USD';
+        }
+
+        return {
+          id: txn.id,
+          type: txn.type,
+          amount: Number(txn.amount),
+          currency: currency,
+          amountInNgn: txn.amountInNgn ? Number(txn.amountInNgn) : null,
+          date: txn.date,
+          status: txn.status,
+          description: txn.description,
+          referenceId: txn.referenceId,
+        };
+      }),
     ]
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 10); // Get top 10 most recent
@@ -129,7 +158,9 @@ export class UsersService {
         phone: user.phone,
         username: user.username,
         onboardingStatus: user.onboardingStatus,
-        balance: Number(user.balance),
+        earnings: Number(user.earnings || 0),
+        wallet: Number(user.wallet || 0),
+        balance: Number(user.earnings || 0), // Backward compatibility
         emailVerified: user.emailVerified,
       },
       creditRequest: {
@@ -137,14 +168,43 @@ export class UsersService {
         amount: creditRequestAmount,
         submittedAt: creditRequestSubmittedAt,
       },
-      recentTransactions: recentTransactions.map((txn) => ({
-        id: txn.id,
-        type: txn.type,
-        amount: Number(txn.amount),
-        date: txn.date,
-        status: txn.status,
-        description: txn.description,
-      })),
+      recentTransactions: recentTransactions.map((txn) => {
+        // Determine currency based on transaction type and amountInNgn
+        let currency = 'USD'; // Default
+        
+        // NGN transactions (wallet-related)
+        if (
+          txn.type === TransactionType.DEPOSIT ||
+          txn.type === TransactionType.CARD_FUNDING ||
+          txn.type === TransactionType.TRANSFER_EARNINGS_TO_WALLET ||
+          txn.type === TransactionType.CARD_PURCHASE
+        ) {
+          currency = 'NGN';
+        }
+        // If amountInNgn is present, it's definitely NGN
+        else if (txn.amountInNgn !== null && txn.amountInNgn !== undefined) {
+          currency = 'NGN';
+        }
+        // USD transactions (earnings-related)
+        else if (
+          txn.type === TransactionType.CREDIT ||
+          txn.type === TransactionType.WITHDRAWAL ||
+          txn.type === TransactionType.PAYOUT
+        ) {
+          currency = 'USD';
+        }
+
+        return {
+          id: txn.id,
+          type: txn.type,
+          amount: Number(txn.amount),
+          currency: currency,
+          amountInNgn: txn.amountInNgn ? Number(txn.amountInNgn) : null,
+          date: txn.date,
+          status: txn.status,
+          description: txn.description,
+        };
+      }),
       recentActivities, // New: Combined activities including credit requests
       todayRate: exchangeRate,
     };

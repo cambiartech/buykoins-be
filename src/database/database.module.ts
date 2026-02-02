@@ -14,6 +14,12 @@ import { SupportConversation } from '../support/entities/support-conversation.en
 import { SupportMessage } from '../support/entities/support-message.entity';
 import { OnboardingAuthCode } from '../support/entities/onboarding-auth-code.entity';
 import { CallRequest } from '../support/entities/call-request.entity';
+import { WidgetSession } from '../widget/entities/widget-session.entity';
+import { SudoCustomer } from '../cards/entities/sudo-customer.entity';
+import { Card } from '../cards/entities/card.entity';
+import { CardTransaction } from '../cards/entities/card-transaction.entity';
+import { FundingSource } from '../cards/entities/funding-source.entity';
+import { PaymentTransaction } from '../payments/entities/payment-transaction.entity';
 
 @Global()
 @Module({
@@ -50,6 +56,12 @@ import { CallRequest } from '../support/entities/call-request.entity';
             SupportMessage,
             OnboardingAuthCode,
             CallRequest,
+            WidgetSession,
+            SudoCustomer,
+            Card,
+            CardTransaction,
+            FundingSource,
+            PaymentTransaction,
           ],
         });
         

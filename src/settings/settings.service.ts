@@ -13,12 +13,14 @@ import {
   PaymentSettings,
   BusinessRulesSettings,
   PlatformInfoSettings,
+  WidgetSettings,
 } from './interfaces/settings.interface';
 import { UpdateFinancialSettingsDto } from './dto/update-financial-settings.dto';
 import { UpdateOperationsSettingsDto } from './dto/update-operations-settings.dto';
 import { UpdatePaymentSettingsDto } from './dto/update-payment-settings.dto';
 import { UpdateBusinessRulesSettingsDto } from './dto/update-business-rules-settings.dto';
 import { UpdatePlatformInfoSettingsDto } from './dto/update-platform-info-settings.dto';
+import { UpdateWidgetSettingsDto } from '../admins/dto/update-widget-settings.dto';
 
 @Injectable()
 export class SettingsService {
@@ -99,6 +101,12 @@ export class SettingsService {
         termsOfServiceUrl: settings.termsOfServiceUrl,
         privacyPolicyUrl: settings.privacyPolicyUrl,
       },
+      widget: {
+        automaticWithdrawalsEnabled: settings.automaticWithdrawalsEnabled || false,
+        paypalEmail: settings.paypalEmail || null,
+        automaticOnboardingEnabled: settings.automaticOnboardingEnabled || false,
+        gmailWebhookUrl: settings.gmailWebhookUrl || null,
+      },
       extended: settings.extendedSettings || {},
       metadata: {
         updatedAt: settings.updatedAt,
@@ -111,13 +119,14 @@ export class SettingsService {
    * Get settings by category
    */
   async getSettingsByCategory(
-    category: 'financial' | 'operations' | 'payment' | 'business-rules' | 'platform-info',
+    category: 'financial' | 'operations' | 'payment' | 'business-rules' | 'platform-info' | 'widget',
   ): Promise<
     | FinancialSettings
     | OperationsSettings
     | PaymentSettings
     | BusinessRulesSettings
     | PlatformInfoSettings
+    | WidgetSettings
   > {
     const allSettings = await this.getAllSettings();
 
@@ -132,6 +141,8 @@ export class SettingsService {
         return allSettings.businessRules;
       case 'platform-info':
         return allSettings.platformInfo;
+      case 'widget':
+        return allSettings.widget;
       default:
         throw new BadRequestException(`Invalid category: ${category}`);
     }
@@ -407,6 +418,39 @@ export class SettingsService {
     };
 
     return flatSettings[key] || null;
+  }
+
+  /**
+   * Update widget settings
+   */
+  async updateWidgetSettings(
+    dto: UpdateWidgetSettingsDto,
+    updatedBy: string,
+  ): Promise<WidgetSettings> {
+    const settings = await this.getOrCreateSettings();
+
+    if (dto.automaticWithdrawalsEnabled !== undefined) {
+      settings.automaticWithdrawalsEnabled = dto.automaticWithdrawalsEnabled;
+    }
+    if (dto.paypalEmail !== undefined) {
+      settings.paypalEmail = dto.paypalEmail;
+    }
+    if (dto.automaticOnboardingEnabled !== undefined) {
+      settings.automaticOnboardingEnabled = dto.automaticOnboardingEnabled;
+    }
+    if (dto.gmailWebhookUrl !== undefined) {
+      settings.gmailWebhookUrl = dto.gmailWebhookUrl;
+    }
+
+    settings.updatedBy = updatedBy;
+    await settings.save();
+
+    return {
+      automaticWithdrawalsEnabled: settings.automaticWithdrawalsEnabled,
+      paypalEmail: settings.paypalEmail,
+      automaticOnboardingEnabled: settings.automaticOnboardingEnabled,
+      gmailWebhookUrl: settings.gmailWebhookUrl,
+    };
   }
 }
 

@@ -18,15 +18,26 @@ export class StorageService {
 
     // Only initialize S3 client if credentials are available
     if (awsConfig.accessKeyId && awsConfig.secretAccessKey) {
-      this.s3Client = new S3Client({
-        region: awsConfig.region,
+      const clientConfig: any = {
+        region: awsConfig.region || 'auto', // R2 uses 'auto' or 'us-east-1'
         credentials: {
           accessKeyId: awsConfig.accessKeyId,
           secretAccessKey: awsConfig.secretAccessKey,
         },
-      });
+      };
+
+      // Add endpoint for Cloudflare R2 or other S3-compatible services
+      if (awsConfig.endpoint) {
+        clientConfig.endpoint = awsConfig.endpoint;
+        // R2 requires forcePathStyle
+        if (awsConfig.endpoint.includes('r2.cloudflarestorage.com')) {
+          clientConfig.forcePathStyle = true;
+        }
+      }
+
+      this.s3Client = new S3Client(clientConfig);
     } else if (this.isDevelopment) {
-      this.logger.warn('AWS S3 credentials not configured. File uploads will be simulated in development mode.');
+      this.logger.warn('Storage credentials not configured. File uploads will be simulated in development mode.');
     }
   }
 
@@ -90,6 +101,19 @@ export class StorageService {
       return `https://storage.example.com/${key}`;
     }
 
+    const awsConfig = this.configService.get('aws');
+    
+    // Use custom public URL for Cloudflare R2 if configured
+    if (awsConfig.r2?.publicUrl) {
+      return `${awsConfig.r2.publicUrl}/${key}`;
+    }
+
+    // Use R2.dev URL if account ID is provided (Cloudflare R2 default)
+    if (awsConfig.r2?.accountId) {
+      return `https://pub-${awsConfig.r2.accountId}.r2.dev/${key}`;
+    }
+
+    // Default to S3 URL
     return `https://${this.bucketName}.s3.amazonaws.com/${key}`;
   }
 }

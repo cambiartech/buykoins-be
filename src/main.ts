@@ -46,7 +46,9 @@ async function bootstrap() {
   app.useGlobalInterceptors(new TransformInterceptor());
 
   // Swagger Documentation
-  if (configService.get<string>('app.nodeEnv') !== 'production') {
+  // Enable Swagger in all environments (can be disabled via env var if needed)
+  const enableSwagger = process.env.ENABLE_SWAGGER !== 'false';
+  if (enableSwagger) {
     const config = new DocumentBuilder()
       .setTitle('BuyTikTokCoins API')
       .setDescription('Backend API for BuyTikTokCoins platform')

@@ -135,7 +135,8 @@ export class AdminsService {
         {
           model: User,
           as: 'user',
-          attributes: ['id', 'email', 'firstName', 'lastName', 'phone', 'balance', 'onboardingStatus'],
+          attributes: ['id', 'email', 'firstName', 'lastName', 'phone', 'earnings', 'wallet', 'onboardingStatus'],
+          required: false,
         },
       ],
     });
@@ -144,20 +145,55 @@ export class AdminsService {
       throw new NotFoundException('Credit request not found');
     }
 
+    // Manually load user if association didn't work
+    let userData: {
+      id: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+      phone: string;
+      earnings: number;
+      wallet: number;
+      balance: number; // Backward compatibility
+      onboardingStatus: OnboardingStatus;
+    } | null = null;
+
+    if (creditRequest.user) {
+      userData = {
+        id: creditRequest.user.id,
+        email: creditRequest.user.email,
+        firstName: creditRequest.user.firstName,
+        lastName: creditRequest.user.lastName,
+        phone: creditRequest.user.phone,
+        earnings: Number(creditRequest.user.earnings || 0),
+        wallet: Number(creditRequest.user.wallet || 0),
+        balance: Number(creditRequest.user.earnings || 0), // Backward compatibility
+        onboardingStatus: creditRequest.user.onboardingStatus,
+      };
+    } else {
+      // Fallback: manually fetch user if association failed
+      const user = await User.findByPk(creditRequest.userId, {
+        attributes: ['id', 'email', 'firstName', 'lastName', 'phone', 'earnings', 'wallet', 'onboardingStatus'],
+      });
+      if (user) {
+        userData = {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          phone: user.phone,
+          earnings: Number(user.earnings || 0),
+          wallet: Number(user.wallet || 0),
+          balance: Number(user.earnings || 0), // Backward compatibility
+          onboardingStatus: user.onboardingStatus,
+        };
+      }
+    }
+
     return {
       id: creditRequest.id,
       userId: creditRequest.userId,
-      user: creditRequest.user
-        ? {
-            id: creditRequest.user.id,
-            email: creditRequest.user.email,
-            firstName: creditRequest.user.firstName,
-            lastName: creditRequest.user.lastName,
-            phone: creditRequest.user.phone,
-            balance: Number(creditRequest.user.balance),
-            onboardingStatus: creditRequest.user.onboardingStatus,
-          }
-        : null,
+      user: userData,
       amount: Number(creditRequest.amount),
       proofUrl: creditRequest.proofUrl,
       status: creditRequest.status,
@@ -246,9 +282,9 @@ export class AdminsService {
       await creditRequest.save({ transaction });
 
       if (creditMethod === CreditMethod.BALANCE) {
-        // Update user balance
-        const currentBalance = Number(user.balance);
-        user.balance = currentBalance + creditAmount;
+        // Update user earnings (TikTok earnings go to earnings balance)
+        const currentEarnings = Number(user.earnings || 0);
+        user.earnings = currentEarnings + creditAmount;
         await user.save({ transaction });
 
         // Create transaction record for balance credit
@@ -289,7 +325,7 @@ export class AdminsService {
         processedBy: creditRequest.processedBy,
         creditMethod,
         amount: creditAmount,
-        userBalance: Number(user.balance),
+        userBalance: Number(user.earnings || 0),
         adminProofUrl,
         bankAccount: creditMethod === CreditMethod.DIRECT && primaryBankAccount ? {
           bankName: primaryBankAccount.bankName,
@@ -394,7 +430,9 @@ export class AdminsService {
         lastName: user.lastName,
         username: user.username,
         phone: user.phone,
-        balance: Number(user.balance),
+        earnings: Number(user.earnings || 0),
+        wallet: Number(user.wallet || 0),
+        balance: Number(user.earnings || 0), // Backward compatibility
         status: user.status,
         onboardingStatus: user.onboardingStatus,
         emailVerified: user.emailVerified,
@@ -438,7 +476,9 @@ export class AdminsService {
       lastName: user.lastName,
       username: user.username,
       phone: user.phone,
-      balance: Number(user.balance),
+      earnings: Number(user.earnings || 0),
+      wallet: Number(user.wallet || 0),
+      balance: Number(user.earnings || 0), // Backward compatibility
       status: user.status,
       onboardingStatus: user.onboardingStatus,
       emailVerified: user.emailVerified,
@@ -705,7 +745,7 @@ export class AdminsService {
         {
           model: User,
           as: 'user',
-          attributes: ['id', 'email', 'firstName', 'lastName', 'phone', 'balance'],
+          attributes: ['id', 'email', 'firstName', 'lastName', 'phone', 'earnings', 'wallet'],
           required: false,
         },
       ],
@@ -722,7 +762,9 @@ export class AdminsService {
       firstName: string;
       lastName: string;
       phone: string;
-      balance: number;
+      earnings: number;
+      wallet: number;
+      balance: number; // Backward compatibility
     } | null = null;
 
     if (payout.user) {
@@ -732,12 +774,14 @@ export class AdminsService {
         firstName: payout.user.firstName,
         lastName: payout.user.lastName,
         phone: payout.user.phone,
-        balance: Number(payout.user.balance),
+        earnings: Number(payout.user.earnings || 0),
+        wallet: Number(payout.user.wallet || 0),
+        balance: Number(payout.user.earnings || 0), // Backward compatibility
       };
     } else {
       // Fallback: manually fetch user if association failed
       const user = await User.findByPk(payout.userId, {
-        attributes: ['id', 'email', 'firstName', 'lastName', 'phone', 'balance'],
+        attributes: ['id', 'email', 'firstName', 'lastName', 'phone', 'earnings', 'wallet'],
       });
       if (user) {
         userData = {
@@ -746,7 +790,9 @@ export class AdminsService {
           firstName: user.firstName,
           lastName: user.lastName,
           phone: user.phone,
-          balance: Number(user.balance),
+          earnings: Number(user.earnings || 0),
+          wallet: Number(user.wallet || 0),
+          balance: Number(user.earnings || 0), // Backward compatibility
         };
       }
     }
@@ -796,11 +842,11 @@ export class AdminsService {
     }
 
     // Check if user has sufficient balance
-    const currentBalance = Number(user.balance);
+    const currentEarnings = Number(user.earnings || 0);
     const payoutAmount = Number(payout.amount);
-    if (currentBalance < payoutAmount) {
+    if (currentEarnings < payoutAmount) {
       throw new BadRequestException(
-        `User has insufficient balance. Current balance: $${currentBalance.toFixed(2)}, Required: $${payoutAmount.toFixed(2)}`,
+        `User has insufficient balance. Current balance: $${currentEarnings.toFixed(2)}, Required: $${payoutAmount.toFixed(2)}`,
       );
     }
 
@@ -822,7 +868,7 @@ export class AdminsService {
       await payout.save({ transaction });
 
       // Deduct from user balance
-      user.balance = currentBalance - payoutAmount;
+      user.earnings = currentEarnings - payoutAmount;
       await user.save({ transaction });
 
       // Calculate exchange rate used (from payout data)
@@ -854,7 +900,7 @@ export class AdminsService {
         processedAt: payout.processedAt,
         completedAt: payout.completedAt,
         processedBy: payout.processedBy,
-        userBalance: Number(user.balance),
+        userBalance: Number(user.earnings || 0),
       };
     } catch (error) {
       await transaction.rollback();
@@ -1022,12 +1068,39 @@ export class AdminsService {
           }
         }
 
+        // Determine currency based on transaction type and amountInNgn
+        // Priority: 1) Transaction type, 2) amountInNgn presence, 3) Default USD
+        let currency = 'USD'; // Default
+        
+        // NGN transactions (wallet-related)
+        if (
+          txn.type === TransactionType.DEPOSIT ||
+          txn.type === TransactionType.CARD_FUNDING ||
+          txn.type === TransactionType.TRANSFER_EARNINGS_TO_WALLET ||
+          txn.type === TransactionType.CARD_PURCHASE
+        ) {
+          currency = 'NGN';
+        }
+        // If amountInNgn is present, it's definitely NGN
+        else if (txn.amountInNgn !== null && txn.amountInNgn !== undefined) {
+          currency = 'NGN';
+        }
+        // USD transactions (earnings-related)
+        else if (
+          txn.type === TransactionType.CREDIT ||
+          txn.type === TransactionType.WITHDRAWAL ||
+          txn.type === TransactionType.PAYOUT
+        ) {
+          currency = 'USD';
+        }
+
         return {
           id: txn.id,
           userId: txn.userId,
           user: userData,
           type: txn.type,
           amount: Number(txn.amount),
+          currency: currency,
           amountInNgn: txn.amountInNgn ? Number(txn.amountInNgn) : null,
           exchangeRate: txn.exchangeRate ? Number(txn.exchangeRate) : null,
           processingFee: txn.processingFee ? Number(txn.processingFee) : null,
@@ -1072,7 +1145,7 @@ export class AdminsService {
         {
           model: User,
           as: 'user',
-          attributes: ['id', 'email', 'firstName', 'lastName', 'phone', 'username', 'balance'],
+          attributes: ['id', 'email', 'firstName', 'lastName', 'phone', 'username', 'earnings', 'wallet'],
           required: false,
         },
       ],
@@ -1090,7 +1163,9 @@ export class AdminsService {
       lastName: string;
       phone: string;
       username: string;
-      balance: number;
+      earnings: number;
+      wallet: number;
+      balance: number; // Backward compatibility
     } | null = null;
 
     if (transaction.user) {
@@ -1101,11 +1176,13 @@ export class AdminsService {
         lastName: transaction.user.lastName,
         phone: transaction.user.phone,
         username: transaction.user.username,
-        balance: Number(transaction.user.balance),
+        earnings: Number(transaction.user.earnings || 0),
+        wallet: Number(transaction.user.wallet || 0),
+        balance: Number(transaction.user.earnings || 0), // Backward compatibility
       };
     } else {
       const user = await User.findByPk(transaction.userId, {
-        attributes: ['id', 'email', 'firstName', 'lastName', 'phone', 'username', 'balance'],
+        attributes: ['id', 'email', 'firstName', 'lastName', 'phone', 'username', 'earnings', 'wallet'],
       });
       if (user) {
         userData = {
@@ -1115,9 +1192,37 @@ export class AdminsService {
           lastName: user.lastName,
           phone: user.phone,
           username: user.username,
-          balance: Number(user.balance),
+          earnings: Number(user.earnings || 0),
+          wallet: Number(user.wallet || 0),
+          balance: Number(user.earnings || 0), // Backward compatibility
         };
       }
+    }
+
+    // Determine currency based on transaction type and amountInNgn
+    // Priority: 1) Transaction type, 2) amountInNgn presence, 3) Default USD
+    let currency = 'USD'; // Default
+    
+    // NGN transactions (wallet-related)
+    if (
+      transaction.type === TransactionType.DEPOSIT ||
+      transaction.type === TransactionType.CARD_FUNDING ||
+      transaction.type === TransactionType.TRANSFER_EARNINGS_TO_WALLET ||
+      transaction.type === TransactionType.CARD_PURCHASE
+    ) {
+      currency = 'NGN';
+    }
+    // If amountInNgn is present, it's definitely NGN
+    else if (transaction.amountInNgn !== null && transaction.amountInNgn !== undefined) {
+      currency = 'NGN';
+    }
+    // USD transactions (earnings-related)
+    else if (
+      transaction.type === TransactionType.CREDIT ||
+      transaction.type === TransactionType.WITHDRAWAL ||
+      transaction.type === TransactionType.PAYOUT
+    ) {
+      currency = 'USD';
     }
 
     return {
@@ -1126,6 +1231,7 @@ export class AdminsService {
       user: userData,
       type: transaction.type,
       amount: Number(transaction.amount),
+      currency: currency,
       amountInNgn: transaction.amountInNgn ? Number(transaction.amountInNgn) : null,
       exchangeRate: transaction.exchangeRate ? Number(transaction.exchangeRate) : null,
       processingFee: transaction.processingFee ? Number(transaction.processingFee) : null,
@@ -1208,6 +1314,19 @@ export class AdminsService {
       },
     });
 
+    // Wallet-related transactions
+    const totalWalletDeposits = await Transaction.sum('amount', {
+      where: { ...where, type: TransactionType.DEPOSIT },
+    });
+
+    const totalCardFunding = await Transaction.sum('amount', {
+      where: { ...where, type: TransactionType.CARD_FUNDING },
+    });
+
+    const totalEarningsToWalletTransfers = await Transaction.sum('amount', {
+      where: { ...where, type: TransactionType.TRANSFER_EARNINGS_TO_WALLET },
+    });
+
     // Net balance = credits - withdrawals (actual value in system)
     const netBalance = (totalCredits ? Number(totalCredits) : 0) - (totalWithdrawals ? Number(totalWithdrawals) : 0);
 
@@ -1243,6 +1362,10 @@ export class AdminsService {
         totalWithdrawals: totalWithdrawals ? Number(totalWithdrawals) : 0,
         netBalance: netBalance, // Actual value in system (credits - withdrawals)
         totalVolume: totalVolume, // Total transaction volume (sum of absolute values)
+        // Wallet-related totals
+        totalWalletDeposits: totalWalletDeposits ? Number(totalWalletDeposits) : 0,
+        totalCardFunding: totalCardFunding ? Number(totalCardFunding) : 0,
+        totalEarningsToWalletTransfers: totalEarningsToWalletTransfers ? Number(totalEarningsToWalletTransfers) : 0,
         // Completed breakdown
         completedCredits: completedCredits ? Number(completedCredits) : 0,
         completedWithdrawals: completedWithdrawals ? Number(completedWithdrawals) : 0,
@@ -1371,12 +1494,26 @@ export class AdminsService {
         };
       }
 
+      // Determine currency for finance report transactions
+      let currency = 'USD';
+      if (
+        txn.type === TransactionType.DEPOSIT ||
+        txn.type === TransactionType.CARD_FUNDING ||
+        txn.type === TransactionType.TRANSFER_EARNINGS_TO_WALLET ||
+        txn.type === TransactionType.CARD_PURCHASE
+      ) {
+        currency = 'NGN';
+      } else if (txn.amountInNgn !== null && txn.amountInNgn !== undefined) {
+        currency = 'NGN';
+      }
+
       return {
         id: txn.id,
         userId: txn.userId,
         user: userData,
         type: txn.type,
         amount: Number(txn.amount),
+        currency: currency,
         amountInNgn: txn.amountInNgn ? Number(txn.amountInNgn) : null,
         exchangeRate: txn.exchangeRate ? Number(txn.exchangeRate) : null,
         processingFee: txn.processingFee ? Number(txn.processingFee) : null,
@@ -1958,7 +2095,7 @@ export class AdminsService {
         {
           model: User,
           as: 'user',
-          attributes: ['id', 'email', 'firstName', 'lastName', 'username', 'phone', 'balance'],
+          attributes: ['id', 'email', 'firstName', 'lastName', 'username', 'phone', 'earnings', 'wallet'],
         },
       ],
       order: [['requestedAt', 'DESC']],
@@ -1977,7 +2114,9 @@ export class AdminsService {
             lastName: payout.user.lastName,
             username: payout.user.username,
             phone: payout.user.phone,
-            balance: Number(payout.user.balance),
+            earnings: Number(payout.user.earnings || 0),
+            wallet: Number(payout.user.wallet || 0),
+            balance: Number(payout.user.earnings || 0), // Backward compatibility
           }
         : null,
       amount: Number(payout.amount),
@@ -1998,7 +2137,7 @@ export class AdminsService {
         {
           model: User,
           as: 'user',
-          attributes: ['id', 'email', 'firstName', 'lastName', 'username', 'phone', 'balance'],
+          attributes: ['id', 'email', 'firstName', 'lastName', 'username', 'phone', 'earnings', 'wallet'],
         },
       ],
       order: [['submittedAt', 'DESC']],
@@ -2017,7 +2156,9 @@ export class AdminsService {
             lastName: req.user.lastName,
             username: req.user.username,
             phone: req.user.phone,
-            balance: Number(req.user.balance),
+            earnings: Number(req.user.earnings || 0),
+            wallet: Number(req.user.wallet || 0),
+            balance: Number(req.user.earnings || 0), // Backward compatibility
           }
         : null,
       amount: Number(req.amount),

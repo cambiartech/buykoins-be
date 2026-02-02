@@ -26,6 +26,9 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   handleRequest(err: any, user: any, info: any, context: ExecutionContext) {
     const request = context.switchToHttp().getRequest();
     
+    // Determine error code based on error type
+    let errorCode = 'AUTH_REQUIRED';
+    
     // Log authentication attempt for debugging
     if (process.env.NODE_ENV === 'development') {
       const authHeader = request.headers?.authorization;
@@ -41,12 +44,26 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     // If there's an error or info (like expired token), throw UnauthorizedException
     if (err || info) {
       const errorMessage = err?.message || info?.message || 'Authentication failed';
-      throw new UnauthorizedException(errorMessage);
+      // Determine error code based on error type
+      let errorCode = 'AUTH_TOKEN_INVALID';
+      if (info?.name === 'TokenExpiredError') {
+        errorCode = 'AUTH_TOKEN_EXPIRED';
+      } else if (info?.name === 'JsonWebTokenError') {
+        errorCode = 'AUTH_TOKEN_INVALID';
+      } else if (info?.name === 'NotBeforeError') {
+        errorCode = 'AUTH_TOKEN_NOT_ACTIVE';
+      }
+      
+      const exception = new UnauthorizedException(errorMessage);
+      (exception as any).errorCode = errorCode;
+      throw exception;
     }
 
     // If no user, throw UnauthorizedException
     if (!user) {
-      throw new UnauthorizedException('Authentication required');
+      const exception = new UnauthorizedException('Authentication required');
+      (exception as any).errorCode = 'AUTH_REQUIRED';
+      throw exception;
     }
 
     return user;

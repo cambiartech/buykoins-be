@@ -24,6 +24,7 @@ import { UpdateOperationsSettingsDto } from './dto/update-operations-settings.dt
 import { UpdatePaymentSettingsDto } from './dto/update-payment-settings.dto';
 import { UpdateBusinessRulesSettingsDto } from './dto/update-business-rules-settings.dto';
 import { UpdatePlatformInfoSettingsDto } from './dto/update-platform-info-settings.dto';
+import { UpdateWidgetSettingsDto } from '../admins/dto/update-widget-settings.dto';
 import { Permission } from '../admins/permissions.constants';
 import { Permissions } from '../common/decorators/roles.decorator';
 
@@ -186,6 +187,30 @@ export class SettingsController {
     return {
       success: true,
       message: 'Platform information settings updated successfully',
+      data,
+    };
+  }
+
+  @Patch('widget')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Update widget settings (PayPal email, automatic onboarding, automatic withdrawals)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Widget settings updated successfully',
+  })
+  @ApiResponse({ status: 400, description: 'Validation error' })
+  @Permissions(Permission.SETTINGS_UPDATE)
+  async updateWidgetSettings(
+    @Body() dto: UpdateWidgetSettingsDto,
+    @CurrentUser() admin: any,
+  ) {
+    const data = await this.settingsService.updateWidgetSettings(
+      dto,
+      admin.id,
+    );
+    return {
+      success: true,
+      message: 'Widget settings updated successfully',
       data,
     };
   }

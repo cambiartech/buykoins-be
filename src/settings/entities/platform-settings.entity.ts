@@ -255,6 +255,35 @@ export class PlatformSettings extends Model<PlatformSettings> {
   })
   declare privacyPolicyUrl: string | null;
 
+  // Widget & Automation Settings
+  @Column({
+    type: DataType.BOOLEAN,
+    defaultValue: false,
+    field: 'automatic_withdrawals_enabled',
+  })
+  declare automaticWithdrawalsEnabled: boolean;
+
+  @Column({
+    type: DataType.STRING(255),
+    allowNull: true,
+    field: 'paypal_email',
+  })
+  declare paypalEmail: string | null;
+
+  @Column({
+    type: DataType.BOOLEAN,
+    defaultValue: false,
+    field: 'automatic_onboarding_enabled',
+  })
+  declare automaticOnboardingEnabled: boolean;
+
+  @Column({
+    type: DataType.STRING(255),
+    allowNull: true,
+    field: 'gmail_webhook_url',
+  })
+  declare gmailWebhookUrl: string | null;
+
   // Extended Settings
   @Column({
     type: DataType.JSONB,

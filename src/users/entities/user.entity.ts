@@ -115,8 +115,25 @@ export class User extends Model<User> {
     type: DataType.DECIMAL(15, 2),
     defaultValue: 0.0,
     allowNull: false,
+    field: 'earnings', // Database column name
   })
-  declare balance: number;
+  declare earnings: number; // TikTok earnings balance
+
+  @Column({
+    type: DataType.DECIMAL(15, 2),
+    defaultValue: 0.0,
+    allowNull: false,
+  })
+  declare wallet: number; // Spending wallet (for cards, airtime, etc.)
+
+  // Backward compatibility: balance maps to earnings
+  get balance(): number {
+    return this.earnings;
+  }
+
+  set balance(value: number) {
+    this.earnings = value;
+  }
 
   @Column({
     type: DataType.ENUM(...Object.values(UserStatus)),
@@ -137,6 +154,29 @@ export class User extends Model<User> {
     field: 'joined_at',
   })
   declare joinedAt: Date;
+
+  @Column({
+    type: DataType.JSONB,
+    allowNull: true,
+    field: 'sudo_customer_onboarding_data',
+  })
+  declare sudoCustomerOnboardingData: {
+    dob?: string;
+    billingAddress?: {
+      line1?: string;
+      line2?: string;
+      city?: string;
+      state?: string;
+      postalCode?: string;
+      country?: string;
+    };
+    identity?: {
+      identityType?: 'BVN' | 'NIN';
+      identityNumber?: string;
+    };
+    onboardingStep?: string;
+    onboardingCompleted?: boolean;
+  } | null;
 
   @CreatedAt
   @Column({ field: 'created_at' })

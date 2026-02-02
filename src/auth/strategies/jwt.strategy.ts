@@ -42,12 +42,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       
       if (!admin) {
         console.error('❌ Admin not found:', payload.sub);
-        throw new UnauthorizedException('Admin account not found');
+        const exception = new UnauthorizedException('Admin account not found');
+        (exception as any).errorCode = 'AUTH_ACCOUNT_NOT_FOUND';
+        throw exception;
       }
 
       if (admin.status !== AdminStatus.ACTIVE) {
         console.error('❌ Admin inactive:', payload.sub, 'Status:', admin.status);
-        throw new UnauthorizedException(`Admin account is ${admin.status}`);
+        const exception = new UnauthorizedException(`Admin account is ${admin.status}`);
+        (exception as any).errorCode = 'AUTH_ACCOUNT_SUSPENDED';
+        throw exception;
       }
 
       if (process.env.NODE_ENV === 'development') {
@@ -70,13 +74,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       const user = await User.findByPk(payload.sub);
       
       if (!user) {
-        console.error('❌ User not found:', payload.sub);
-        throw new UnauthorizedException('User account not found');
+        console.error(' User not found:', payload.sub);
+        const exception = new UnauthorizedException('User account not found');
+        (exception as any).errorCode = 'AUTH_ACCOUNT_NOT_FOUND';
+        throw exception;
       }
 
       if (user.status !== UserStatus.ACTIVE) {
-        console.error('❌ User inactive:', payload.sub, 'Status:', user.status);
-        throw new UnauthorizedException(`User account is ${user.status}`);
+        console.error('User inactive:', payload.sub, 'Status:', user.status);
+        const exception = new UnauthorizedException(`User account is ${user.status}`);
+        (exception as any).errorCode = 'AUTH_ACCOUNT_SUSPENDED';
+        throw exception;
       }
 
       return {

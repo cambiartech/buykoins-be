@@ -14,6 +14,10 @@ export enum TransactionType {
   CREDIT = 'credit',
   WITHDRAWAL = 'withdrawal',
   PAYOUT = 'payout',
+  CARD_PURCHASE = 'card_purchase',
+  CARD_FUNDING = 'card_funding',
+  DEPOSIT = 'deposit', // Paystack payment deposit
+  TRANSFER_EARNINGS_TO_WALLET = 'transfer_earnings_to_wallet', // Transfer from earnings to wallet
 }
 
 export enum TransactionStatus {

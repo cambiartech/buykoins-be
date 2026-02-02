@@ -7,9 +7,10 @@ import { AuthModule } from '../auth/auth.module';
 import { StorageModule } from '../storage/storage.module';
 import { EmailModule } from '../email/email.module';
 import { SupportModule } from '../support/support.module';
+import { WidgetModule } from '../widget/widget.module';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, StorageModule, EmailModule, SupportModule],
+  imports: [DatabaseModule, AuthModule, StorageModule, EmailModule, SupportModule, WidgetModule],
   controllers: [AdminsController, AdminAuthController],
   providers: [AdminsService],
   exports: [AdminsService],

@@ -15,6 +15,7 @@ import {
   ParseIntPipe,
   DefaultValuePipe,
   BadRequestException,
+  NotFoundException,
   ParseFilePipe,
   MaxFileSizeValidator,
   FileTypeValidator,
@@ -43,6 +44,11 @@ import { RejectCreditRequestDto } from './dto/reject-credit-request.dto';
 import { CompleteOnboardingDto } from './dto/complete-onboarding.dto';
 import { ProcessPayoutDto } from './dto/process-payout.dto';
 import { RejectPayoutDto } from './dto/reject-payout.dto';
+import { ProvideWidgetCredentialsDto } from './dto/provide-widget-credentials.dto';
+import { WidgetService } from '../widget/widget.service';
+import { WidgetSession } from '../widget/entities/widget-session.entity';
+import { User } from '../users/entities/user.entity';
+import { Op } from 'sequelize';
 
 @ApiTags('Admin')
 @Controller('admin')
@@ -50,7 +56,10 @@ import { RejectPayoutDto } from './dto/reject-payout.dto';
 @ApiBearerAuth()
 @Roles('admin', 'super_admin')
 export class AdminsController {
-  constructor(private readonly adminsService: AdminsService) {}
+  constructor(
+    private readonly adminsService: AdminsService,
+    private readonly widgetService: WidgetService,
+  ) {}
 
   @Get('dashboard')
   @HttpCode(HttpStatus.OK)
@@ -472,9 +481,9 @@ export class AdminsController {
   @ApiQuery({
     name: 'type',
     required: false,
-    enum: ['all', 'credit', 'withdrawal', 'payout'],
+    enum: ['all', 'credit', 'withdrawal', 'payout', 'deposit', 'card_funding', 'transfer_earnings_to_wallet', 'card_purchase'],
     example: 'all',
-    description: 'Filter by transaction type. Future types: giftcard, crypto, etc.',
+    description: 'Filter by transaction type. Includes: credit, withdrawal, payout, deposit (wallet funding), card_funding, transfer_earnings_to_wallet, card_purchase',
   })
   @ApiQuery({
     name: 'status',
@@ -558,8 +567,9 @@ export class AdminsController {
   @ApiQuery({
     name: 'type',
     required: false,
-    enum: ['all', 'credit', 'withdrawal', 'payout'],
+    enum: ['all', 'credit', 'withdrawal', 'payout', 'deposit', 'card_funding', 'transfer_earnings_to_wallet', 'card_purchase'],
     example: 'all',
+    description: 'Filter by transaction type',
   })
   @ApiQuery({
     name: 'status',
@@ -866,5 +876,192 @@ export class AdminsController {
       message: data.message,
     };
   }
-}
 
+  /**
+   * Provide PayPal credentials for widget onboarding
+   */
+  @Post('widget/:sessionId/provide-credentials')
+  @Roles('admin', 'super_admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Provide PayPal credentials and generate auth code for widget onboarding' })
+  @ApiResponse({
+    status: 200,
+    description: 'Credentials provided and auth code generated successfully',
+  })
+  async provideWidgetCredentials(
+    @CurrentUser() admin: any,
+    @Param('sessionId') sessionId: string,
+    @Body() provideDto: ProvideWidgetCredentialsDto,
+  ) {
+    // Get session - admin can access any session
+    const session = await this.widgetService.getSessionForAdmin(sessionId);
+    const userId = session.userId;
+
+    // Try to get auth code from Gmail (if automated)
+    let authCode = await this.widgetService.getAuthCodeFromGmail(userId, sessionId);
+    
+    // If not found in Gmail, return null - admin will check Gmail manually
+    // Admin can then call storeRetrievedAuthCode endpoint with the code
+
+    return {
+      success: true,
+      data: {
+        authCode: authCode || null,
+        message: authCode 
+          ? 'Auth code retrieved from Gmail. Please send PayPal credentials and this auth code to user via support chat or email.'
+          : 'No auth code found in Gmail. Please check Gmail manually for PayPal auth code, then use the store-auth-code endpoint.',
+        instructions: [
+          '1. Check Gmail for PayPal verification email',
+          '2. Extract the 6-digit auth code',
+          '3. Use POST /api/admin/widget/:sessionId/store-auth-code to store it',
+          '4. Send credentials and code to user via support chat',
+        ],
+      },
+    };
+  }
+
+  /**
+   * Store auth code retrieved from Gmail
+   */
+  @Post('widget/:sessionId/store-auth-code')
+  @Roles('admin', 'super_admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Store PayPal auth code retrieved from Gmail' })
+  @ApiResponse({
+    status: 200,
+    description: 'Auth code stored successfully',
+  })
+  async storeAuthCode(
+    @CurrentUser() admin: any,
+    @Param('sessionId') sessionId: string,
+    @Body() body: { authCode: string; conversationId?: string },
+  ) {
+    const session = await this.widgetService.getSessionForAdmin(sessionId);
+    const userId = session.userId;
+
+    // Store the auth code
+    const authCodeRecord = await this.widgetService.storeRetrievedAuthCode(
+      userId,
+      admin.id,
+      sessionId,
+      body.authCode,
+      body.conversationId,
+    );
+
+    return {
+      success: true,
+      data: {
+        authCode: authCodeRecord.code,
+        expiresAt: authCodeRecord.expiresAt?.toISOString(),
+        message: 'Auth code stored. Please send PayPal credentials and this auth code to user via support chat or email.',
+      },
+    };
+  }
+
+  /**
+   * Get all widget sessions (admin view)
+   */
+  @Get('widget/sessions')
+  @Roles('admin', 'super_admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get all widget sessions for admin monitoring' })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+  @ApiQuery({ name: 'status', required: false, enum: ['active', 'completed', 'abandoned', 'error'] })
+  @ApiQuery({ name: 'trigger', required: false, enum: ['onboarding', 'withdrawal', 'deposit'] })
+  @ApiResponse({
+    status: 200,
+    description: 'Widget sessions retrieved successfully',
+  })
+  async getWidgetSessions(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query('status') status?: string,
+    @Query('trigger') trigger?: string,
+  ) {
+
+    const where: any = {};
+    if (status) {
+      where.status = status;
+    }
+    if (trigger) {
+      where.triggerType = trigger;
+    }
+
+    const offset = (page - 1) * limit;
+    const maxLimit = Math.min(limit, 50);
+
+    const { count, rows } = await WidgetSession.findAndCountAll({
+      where,
+      include: [
+        {
+          model: User,
+          attributes: ['id', 'email', 'firstName', 'lastName'],
+        },
+      ],
+      order: [['createdAt', 'DESC']],
+      limit: maxLimit,
+      offset,
+    });
+
+    return {
+      success: true,
+      data: {
+        sessions: rows.map(session => ({
+          id: session.id,
+          userId: session.userId,
+          user: session.user ? {
+            id: session.user.id,
+            email: session.user.email,
+            firstName: session.user.firstName,
+            lastName: session.user.lastName,
+          } : null,
+          triggerType: session.triggerType,
+          currentStep: session.currentStep,
+          status: session.status,
+          context: session.context,
+          createdAt: session.createdAt,
+          updatedAt: session.updatedAt,
+          expiresAt: session.expiresAt,
+          lastActivityAt: session.lastActivityAt,
+        })),
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(count / maxLimit),
+          totalItems: count,
+          itemsPerPage: maxLimit,
+        },
+      },
+    };
+  }
+
+  /**
+   * Get widget withdrawal requests (pending withdrawals from widget)
+   */
+  @Get('widget/withdrawals')
+  @Roles('admin', 'super_admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get withdrawal requests from widget sessions' })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+  @ApiResponse({
+    status: 200,
+    description: 'Widget withdrawal requests retrieved successfully',
+  })
+  async getWidgetWithdrawals(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+  ) {
+    // Get payouts that were created via widget (we can track this via notes or context)
+    // For now, return all pending payouts - they can be from widget or regular flow
+    const data = await this.adminsService.getPayouts(page, limit, 'pending');
+    
+    return {
+      success: true,
+      data: {
+        ...data,
+        note: 'These are all pending withdrawal requests. Widget withdrawals are included here.',
+      },
+    };
+  }
+}

@@ -49,12 +49,20 @@ export interface PlatformInfoSettings {
   privacyPolicyUrl: string | null;
 }
 
+export interface WidgetSettings {
+  automaticWithdrawalsEnabled: boolean;
+  paypalEmail: string | null;
+  automaticOnboardingEnabled: boolean;
+  gmailWebhookUrl: string | null;
+}
+
 export interface PlatformSettingsResponse {
   financial: FinancialSettings;
   operations: OperationsSettings;
   payment: PaymentSettings;
   businessRules: BusinessRulesSettings;
   platformInfo: PlatformInfoSettings;
+  widget: WidgetSettings;
   extended: Record<string, any>;
   metadata: {
     updatedAt: Date;
