@@ -60,9 +60,11 @@ async function bootstrap() {
   }
 
   const port = configService.get<number>('app.port', 3001);
-  await app.listen(port);
-  console.log(`Application is running on: http://localhost:${port}/${apiPrefix}`);
-  console.log(`Swagger docs available at: http://localhost:${port}/${apiPrefix}/docs`);
+  // Railway requires listening on 0.0.0.0 (all interfaces), not localhost
+  await app.listen(port, '0.0.0.0');
+  const host = process.env.RAILWAY_ENVIRONMENT ? '0.0.0.0' : 'localhost';
+  console.log(`Application is running on: http://${host}:${port}/${apiPrefix}`);
+  console.log(`Swagger docs available at: http://${host}:${port}/${apiPrefix}/docs`);
 }
 
 bootstrap();
