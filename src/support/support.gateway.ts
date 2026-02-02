@@ -219,7 +219,7 @@ export class SupportGateway implements OnGatewayConnection, OnGatewayDisconnect 
   /**
    * Handle disconnection
    */
-  async handleDisconnect(client: Socket) {
+  handleDisconnect(client: Socket) {
     const auth = this.socketAuthMap.get(client.id);
     
     if (auth) {
@@ -355,7 +355,7 @@ export class SupportGateway implements OnGatewayConnection, OnGatewayDisconnect 
    * Typing indicator
    */
   @SubscribeMessage('typing:start')
-  async handleTypingStart(
+  handleTypingStart(
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: { conversationId: string },
   ) {

@@ -63,7 +63,7 @@ export class SupportController {
     status: 200,
     description: 'WebSocket server is running',
   })
-  async healthCheck() {
+  healthCheck() {
     return {
       success: true,
       message: 'WebSocket server is running',
@@ -372,7 +372,7 @@ export class SupportController {
     status: 200,
     description: 'Conversation options retrieved successfully',
   })
-  async getConversationOptions() {
+  getConversationOptions() {
     return {
       success: true,
       data: {
@@ -420,7 +420,7 @@ export class SupportController {
     status: 200,
     description: 'Standard messages retrieved successfully',
   })
-  async getStandardMessages() {
+  getStandardMessages() {
     return {
       success: true,
       data: {
