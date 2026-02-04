@@ -20,6 +20,7 @@ import { Card } from '../cards/entities/card.entity';
 import { CardTransaction } from '../cards/entities/card-transaction.entity';
 import { FundingSource } from '../cards/entities/funding-source.entity';
 import { PaymentTransaction } from '../payments/entities/payment-transaction.entity';
+import { Notification } from '../notifications/entities/notification.entity';
 
 @Global()
 @Module({
@@ -62,6 +63,7 @@ import { PaymentTransaction } from '../payments/entities/payment-transaction.ent
             CardTransaction,
             FundingSource,
             PaymentTransaction,
+            Notification,
           ],
         });
         

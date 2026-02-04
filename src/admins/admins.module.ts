@@ -8,9 +8,10 @@ import { StorageModule } from '../storage/storage.module';
 import { EmailModule } from '../email/email.module';
 import { SupportModule } from '../support/support.module';
 import { WidgetModule } from '../widget/widget.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, StorageModule, EmailModule, SupportModule, WidgetModule],
+  imports: [DatabaseModule, AuthModule, StorageModule, EmailModule, SupportModule, WidgetModule, NotificationsModule],
   controllers: [AdminsController, AdminAuthController],
   providers: [AdminsService],
   exports: [AdminsService],

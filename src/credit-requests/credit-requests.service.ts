@@ -11,12 +11,17 @@ import { CreditRequest, CreditRequestStatus } from './entities/credit-request.en
 import { User, OnboardingStatus } from '../users/entities/user.entity';
 import { StorageService } from '../storage/storage.service';
 import { CreateCreditRequestDto } from './dto/create-credit-request.dto';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
+import { Admin } from '../admins/entities/admin.entity';
 
 @Injectable()
 export class CreditRequestsService {
   constructor(
     @Inject('SEQUELIZE') private sequelize: Sequelize,
     private storageService: StorageService,
+    private notificationsService: NotificationsService,
+    private notificationsGateway: NotificationsGateway,
   ) {}
 
   /**
@@ -101,6 +106,29 @@ export class CreditRequestsService {
       status: CreditRequestStatus.PENDING,
       submittedAt: new Date(),
     } as any);
+
+    // Notify all admins
+    try {
+      const admins = await Admin.findAll({
+        where: { status: 'active' },
+        attributes: ['id'],
+      });
+      const adminIds = admins.map((a) => a.id);
+
+      const notifications = await this.notificationsService.notifyAdminNewCreditRequest(
+        adminIds,
+        userId,
+        createCreditRequestDto.amount,
+        creditRequest.id,
+      );
+
+      // Send via WebSocket to online admins
+      if (notifications && notifications.length > 0) {
+        await this.notificationsGateway.sendToAllAdmins(notifications[0]);
+      }
+    } catch (notifError) {
+      console.error('Failed to send admin notifications:', notifError);
+    }
 
     return {
       id: creditRequest.id,

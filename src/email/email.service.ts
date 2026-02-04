@@ -1,28 +1,31 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  SESClient,
-  SendEmailCommand,
-  SendEmailCommandInput,
-} from '@aws-sdk/client-ses';
+import * as postmark from 'postmark';
 import { VerificationEmailTemplate } from './templates/verification-email.template';
+import { WelcomeEmailTemplate } from './templates/welcome-email.template';
+import { CreditApprovedEmailTemplate } from './templates/credit-approved.template';
+import { CreditRejectedEmailTemplate } from './templates/credit-rejected.template';
+import { PayoutCompletedEmailTemplate } from './templates/payout-completed.template';
 
 @Injectable()
 export class EmailService {
-  private sesClient: SESClient;
+  private postmarkClient: postmark.ServerClient;
   private fromEmail: string;
+  private fromName: string;
+  private replyTo?: string;
 
   constructor(private configService: ConfigService) {
-    const awsConfig = this.configService.get('aws');
-    this.fromEmail = awsConfig.ses.fromEmail;
+    const postmarkConfig = this.configService.get('postmark');
+    const apiKey = postmarkConfig?.apiKey || postmarkConfig?.serverToken;
 
-    this.sesClient = new SESClient({
-      region: awsConfig.region,
-      credentials: {
-        accessKeyId: awsConfig.accessKeyId,
-        secretAccessKey: awsConfig.secretAccessKey,
-      },
-    });
+    this.fromEmail = postmarkConfig?.fromEmail || 'noreply@buykoins.com';
+    this.fromName = postmarkConfig?.fromName || 'Buykoins';
+    this.replyTo = postmarkConfig?.replyTo;
+
+    // Initialize Postmark client if API key is provided
+    if (apiKey) {
+      this.postmarkClient = new postmark.ServerClient(apiKey);
+    }
   }
 
   async sendEmail(
@@ -33,57 +36,52 @@ export class EmailService {
   ): Promise<void> {
     const recipients = Array.isArray(to) ? to : [to];
 
-    const params: SendEmailCommandInput = {
-      Source: this.fromEmail,
-      Destination: {
-        ToAddresses: recipients,
-      },
-      Message: {
-        Subject: {
-          Data: subject,
-          Charset: 'UTF-8',
-        },
-        Body: {
-          Html: {
-            Data: htmlBody,
-            Charset: 'UTF-8',
-          },
-          ...(textBody && {
-            Text: {
-              Data: textBody,
-              Charset: 'UTF-8',
-            },
-          }),
-        },
-      },
-    };
+    // Development mode: log email instead of sending
+    if (!this.postmarkClient) {
+      console.log('\n📧 ============================================');
+      console.log('📧 EMAIL (Development Mode - Postmark not configured)');
+      console.log('📧 ============================================');
+      console.log(`📧 To: ${recipients.join(', ')}`);
+      console.log(`📧 Subject: ${subject}`);
+      console.log(`📧 HTML Body Length: ${htmlBody.length} chars`);
+      if (textBody) {
+        console.log(`📧 Text Body Length: ${textBody.length} chars`);
+      }
+      console.log('📧 ============================================\n');
+      return;
+    }
 
     try {
-      const command = new SendEmailCommand(params);
-      await this.sesClient.send(command);
+      // Send to all recipients
+      const emailPromises = recipients.map((recipient) => {
+        const email: postmark.Models.Message = {
+          From: `${this.fromName} <${this.fromEmail}>`,
+          To: recipient,
+          Subject: subject,
+          HtmlBody: htmlBody,
+          ...(textBody && { TextBody: textBody }),
+          ...(this.replyTo && { ReplyTo: this.replyTo }),
+          MessageStream: 'outbound', // Default transactional stream
+        };
+
+        return this.postmarkClient.sendEmail(email);
+      });
+
+      await Promise.all(emailPromises);
     } catch (error) {
-      console.error('Error sending email:', error);
+      console.error('Error sending email via Postmark:', error);
       throw error;
     }
   }
 
   async sendVerificationCode(email: string, code: string): Promise<void> {
-    // For development: console log instead of sending email
-    if (!this.configService.get('aws.accessKeyId') || !this.configService.get('aws.secretAccessKey')) {
-      console.log('\n📧 ============================================');
-      console.log('📧 VERIFICATION CODE (Development Mode)');
-      console.log('📧 ============================================');
-      console.log(`📧 Email: ${email}`);
-      console.log(`📧 Verification Code: ${code}`);
-      console.log(`📧 Expires in: 15 minutes`);
-      console.log('📧 ============================================\n');
-      return;
-    }
-
-    // Production: Send actual email
-    const subject = 'Verify Your Email - BuyTikTokCoins';
-    const htmlBody = VerificationEmailTemplate.getHtml(code);
-    const textBody = VerificationEmailTemplate.getText(code);
+    const subject = 'Verify Your Email - Buykoins';
+    const assetsBaseUrl = this.configService.get('postmark.assetsBaseUrl') || 
+                         this.configService.get('aws.r2.publicUrl') || 
+                         'https://storage.buykoins.com';
+    
+    const htmlBody = VerificationEmailTemplate.getHtml(code, 15, assetsBaseUrl);
+    const textBody = VerificationEmailTemplate.getText(code, 15);
 
     await this.sendEmail(email, subject, htmlBody, textBody);
   }
@@ -92,29 +90,12 @@ export class EmailService {
    * Send bank account verification code
    */
   async sendBankAccountVerificationCode(email: string, code: string) {
-    const isDevelopment =
-      this.configService.get<string>('app.nodeEnv') !== 'production';
-
-    if (isDevelopment) {
-      // Development: Console log the code
-      console.log('\n==========================================');
-      console.log('🏦 BANK ACCOUNT VERIFICATION CODE (Development Mode)');
-      console.log('==========================================');
-      console.log(`📧 Email: ${email}`);
-      console.log(`🔑 Verification Code: ${code}`);
-      console.log(`⏰ Expires in: 15 minutes`);
-      console.log('==========================================\n');
-      return;
-    }
-
-    // Production: Send actual email
-    const subject = 'Verify Your Bank Account - BuyTikTokCoins';
-    const htmlBody = `
-      <h2>Bank Account Verification</h2>
-      <p>Your verification code is: <strong>${code}</strong></p>
-      <p>This code will expire in 15 minutes.</p>
-      <p>If you didn't request this, please ignore this email.</p>
-    `;
+    const subject = 'Verify Your Bank Account - Buykoins';
+    const assetsBaseUrl = this.configService.get('postmark.assetsBaseUrl') || 
+                         this.configService.get('aws.r2.publicUrl') || 
+                         'https://storage.buykoins.com';
+    
+    const htmlBody = VerificationEmailTemplate.getHtml(code, 15, assetsBaseUrl, 'Bank Account Verification');
     const textBody = `Your bank account verification code is: ${code}. This code will expire in 15 minutes.`;
 
     await this.sendEmail(email, subject, htmlBody, textBody);
@@ -124,31 +105,83 @@ export class EmailService {
    * Send admin password change OTP
    */
   async sendAdminPasswordChangeOtp(email: string, code: string) {
-    const isDevelopment =
-      this.configService.get<string>('app.nodeEnv') !== 'production';
-
-    if (isDevelopment) {
-      // Development: Console log the code
-      console.log('\n==========================================');
-      console.log('🔐 ADMIN PASSWORD CHANGE OTP (Development Mode)');
-      console.log('==========================================');
-      console.log(`📧 Email: ${email}`);
-      console.log(`🔑 OTP: ${code}`);
-      console.log(`⏰ Expires in: 15 minutes`);
-      console.log('==========================================\n');
-      return;
-    }
-
-    // Production: Send actual email
-    const subject = 'Password Change Verification - BuyTikTokCoins Admin';
-    const htmlBody = `
-      <h2>Password Change Verification</h2>
-      <p>You requested to change your admin password.</p>
-      <p>Your verification code is: <strong>${code}</strong></p>
-      <p>This code will expire in 15 minutes.</p>
-      <p>If you didn't request this, please contact support immediately.</p>
-    `;
+    const subject = 'Password Change Verification - Buykoins Admin';
+    const assetsBaseUrl = this.configService.get('postmark.assetsBaseUrl') || 
+                         this.configService.get('aws.r2.publicUrl') || 
+                         'https://storage.buykoins.com';
+    
+    const htmlBody = VerificationEmailTemplate.getHtml(code, 15, assetsBaseUrl, 'Password Change Verification');
     const textBody = `You requested to change your admin password. Your verification code is: ${code}. This code will expire in 15 minutes. If you didn't request this, please contact support immediately.`;
+
+    await this.sendEmail(email, subject, htmlBody, textBody);
+  }
+
+  /**
+   * Send welcome email after onboarding completion
+   */
+  async sendWelcomeEmail(email: string, firstName: string) {
+    const subject = 'Welcome to Buykoins - You\'re All Set! 🎉';
+    const assetsBaseUrl = this.configService.get('postmark.assetsBaseUrl') || 
+                         this.configService.get('aws.r2.publicUrl') || 
+                         'https://storage.buykoins.com';
+    
+    const htmlBody = WelcomeEmailTemplate.getHtml(firstName, assetsBaseUrl);
+    const textBody = WelcomeEmailTemplate.getText(firstName);
+
+    await this.sendEmail(email, subject, htmlBody, textBody);
+  }
+
+  /**
+   * Send credit approved email
+   */
+  async sendCreditApprovedEmail(email: string, amount: number, balance: number) {
+    const subject = 'Credit Request Approved - Buykoins';
+    const assetsBaseUrl = this.configService.get('postmark.assetsBaseUrl') || 
+                         this.configService.get('aws.r2.publicUrl') || 
+                         'https://storage.buykoins.com';
+    
+    const htmlBody = CreditApprovedEmailTemplate.getHtml(amount, balance, assetsBaseUrl);
+    const textBody = CreditApprovedEmailTemplate.getText(amount, balance);
+
+    await this.sendEmail(email, subject, htmlBody, textBody);
+  }
+
+  /**
+   * Send credit rejected email
+   */
+  async sendCreditRejectedEmail(email: string, reason: string) {
+    const subject = 'Credit Request Update - Buykoins';
+    const assetsBaseUrl = this.configService.get('postmark.assetsBaseUrl') || 
+                         this.configService.get('aws.r2.publicUrl') || 
+                         'https://storage.buykoins.com';
+    
+    const htmlBody = CreditRejectedEmailTemplate.getHtml(reason, assetsBaseUrl);
+    const textBody = CreditRejectedEmailTemplate.getText(reason);
+
+    await this.sendEmail(email, subject, htmlBody, textBody);
+  }
+
+  /**
+   * Send payout completed email
+   */
+  async sendPayoutCompletedEmail(
+    email: string,
+    amount: number,
+    amountInNgn: number,
+    transactionReference: string,
+  ) {
+    const subject = 'Payout Completed - Buykoins';
+    const assetsBaseUrl = this.configService.get('postmark.assetsBaseUrl') || 
+                         this.configService.get('aws.r2.publicUrl') || 
+                         'https://storage.buykoins.com';
+    
+    const htmlBody = PayoutCompletedEmailTemplate.getHtml(
+      amount,
+      amountInNgn,
+      transactionReference,
+      assetsBaseUrl,
+    );
+    const textBody = PayoutCompletedEmailTemplate.getText(amount, amountInNgn, transactionReference);
 
     await this.sendEmail(email, subject, htmlBody, textBody);
   }

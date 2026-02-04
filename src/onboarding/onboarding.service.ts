@@ -8,11 +8,16 @@ import { Sequelize } from 'sequelize-typescript';
 import { OnboardingRequest, OnboardingRequestStatus } from './entities/onboarding-request.entity';
 import { User, OnboardingStatus } from '../users/entities/user.entity';
 import { CreateOnboardingRequestDto } from './dto/create-onboarding-request.dto';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
+import { Admin } from '../admins/entities/admin.entity';
 
 @Injectable()
 export class OnboardingService {
   constructor(
     @Inject('SEQUELIZE') private sequelize: Sequelize,
+    private notificationsService: NotificationsService,
+    private notificationsGateway: NotificationsGateway,
   ) {}
 
   /**
@@ -50,6 +55,28 @@ export class OnboardingService {
       status: OnboardingRequestStatus.PENDING,
       submittedAt: new Date(),
     } as any);
+
+    // Notify all admins
+    try {
+      const admins = await Admin.findAll({
+        where: { status: 'active' },
+        attributes: ['id'],
+      });
+      const adminIds = admins.map((a) => a.id);
+
+      const notifications = await this.notificationsService.notifyAdminNewOnboardingRequest(
+        adminIds,
+        userId,
+        onboardingRequest.id,
+      );
+
+      // Send via WebSocket to online admins
+      if (notifications && notifications.length > 0) {
+        await this.notificationsGateway.sendToAllAdmins(notifications[0]);
+      }
+    } catch (notifError) {
+      console.error('Failed to send admin notifications:', notifError);
+    }
 
     return {
       id: onboardingRequest.id,

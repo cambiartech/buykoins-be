@@ -12,12 +12,17 @@ import { BankAccount } from '../bank-accounts/entities/bank-account.entity';
 import { CreatePayoutDto } from './dto/create-payout.dto';
 import { SettingsService } from '../settings/settings.service';
 import { Transaction, TransactionType, TransactionStatus } from '../transactions/entities/transaction.entity';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
+import { Admin } from '../admins/entities/admin.entity';
 
 @Injectable()
 export class PayoutsService {
   constructor(
     @Inject('SEQUELIZE') private sequelize: Sequelize,
     private settingsService: SettingsService,
+    private notificationsService: NotificationsService,
+    private notificationsGateway: NotificationsGateway,
   ) {}
 
   /**
@@ -164,6 +169,29 @@ export class PayoutsService {
       status: PayoutStatus.PENDING,
       requestedAt: new Date(),
     } as any);
+
+    // Notify all admins
+    try {
+      const admins = await Admin.findAll({
+        where: { status: 'active' },
+        attributes: ['id'],
+      });
+      const adminIds = admins.map((a) => a.id);
+
+      const notifications = await this.notificationsService.notifyAdminNewPayoutRequest(
+        adminIds,
+        userId,
+        createDto.amount,
+        payout.id,
+      );
+
+      // Send via WebSocket to online admins
+      if (notifications && notifications.length > 0) {
+        await this.notificationsGateway.sendToAllAdmins(notifications[0]);
+      }
+    } catch (notifError) {
+      console.error('Failed to send admin notifications:', notifError);
+    }
 
     return {
       id: payout.id,

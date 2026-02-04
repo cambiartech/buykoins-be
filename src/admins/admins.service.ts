@@ -25,6 +25,8 @@ import { PasswordUtil } from '../auth/utils/password.util';
 import { EmailService } from '../email/email.service';
 import { VerificationCodeUtil } from '../auth/utils/verification-code.util';
 import { SupportConversation, ConversationStatus } from '../support/entities/support-conversation.entity';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { SenderType } from '../support/entities/support-message.entity';
 import { SupportService } from '../support/support.service';
 
@@ -35,6 +37,8 @@ export class AdminsService {
     private storageService: StorageService,
     private emailService: EmailService,
     private supportService: SupportService,
+    private notificationsService: NotificationsService,
+    private notificationsGateway: NotificationsGateway,
   ) {}
 
   /**
@@ -318,6 +322,31 @@ export class AdminsService {
 
       await transaction.commit();
 
+      // Send credit approved email
+      try {
+        await this.emailService.sendCreditApprovedEmail(
+          user.email,
+          creditAmount,
+          Number(user.earnings || 0),
+        );
+      } catch (emailError) {
+        // Log error but don't fail the approval process
+        console.error('Failed to send credit approved email:', emailError);
+      }
+
+      // Send notification
+      try {
+        const notification = await this.notificationsService.notifyCreditApproved(
+          user.id,
+          creditAmount,
+          Number(user.earnings || 0),
+          creditRequestId,
+        );
+        await this.notificationsGateway.sendToUser(user.id, notification);
+      } catch (notifError) {
+        console.error('Failed to send notification:', notifError);
+      }
+
       const response = {
         id: creditRequest.id,
         status: creditRequest.status,
@@ -361,12 +390,38 @@ export class AdminsService {
       );
     }
 
+    // Get user for email
+    const user = await User.findByPk(creditRequest.userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
     // Update credit request
     creditRequest.status = CreditRequestStatus.REJECTED;
     creditRequest.processedAt = new Date();
     creditRequest.processedBy = adminId;
     creditRequest.rejectionReason = rejectDto.reason;
     await creditRequest.save();
+
+    // Send credit rejected email
+    try {
+      await this.emailService.sendCreditRejectedEmail(user.email, rejectDto.reason);
+    } catch (emailError) {
+      // Log error but don't fail the rejection process
+      console.error('Failed to send credit rejected email:', emailError);
+    }
+
+    // Send notification
+    try {
+      const notification = await this.notificationsService.notifyCreditRejected(
+        user.id,
+        rejectDto.reason,
+        creditRequestId,
+      );
+      await this.notificationsGateway.sendToUser(user.id, notification);
+    } catch (notifError) {
+      console.error('Failed to send notification:', notifError);
+    }
 
     return {
       id: creditRequest.id,
@@ -580,6 +635,25 @@ export class AdminsService {
       await onboardingRequest.save({ transaction });
 
       await transaction.commit();
+
+      // Send welcome email after successful onboarding
+      try {
+        await this.emailService.sendWelcomeEmail(
+          user.email,
+          user.firstName || 'there', // Fallback if firstName is not set
+        );
+      } catch (emailError) {
+        // Log error but don't fail the onboarding process
+        console.error('Failed to send welcome email:', emailError);
+      }
+
+      // Send notification
+      try {
+        const notification = await this.notificationsService.notifyOnboardingCompleted(user.id);
+        await this.notificationsGateway.sendToUser(user.id, notification);
+      } catch (notifError) {
+        console.error('Failed to send notification:', notifError);
+      }
 
       return {
         userId: user.id,
@@ -893,6 +967,31 @@ export class AdminsService {
       );
 
       await transaction.commit();
+
+      // Send payout completed email
+      try {
+        await this.emailService.sendPayoutCompletedEmail(
+          user.email,
+          Number(payout.amount),
+          Number(payout.amountInNgn),
+          payout.transactionReference || 'N/A',
+        );
+      } catch (emailError) {
+        // Log error but don't fail the payout process
+        console.error('Failed to send payout completed email:', emailError);
+      }
+
+      // Send notification
+      try {
+        const notification = await this.notificationsService.notifyPayoutCompleted(
+          user.id,
+          Number(payout.amount),
+          payoutId,
+        );
+        await this.notificationsGateway.sendToUser(user.id, notification);
+      } catch (notifError) {
+        console.error('Failed to send notification:', notifError);
+      }
 
       return {
         id: payout.id,
