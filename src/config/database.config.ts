@@ -9,11 +9,12 @@ export default registerAs('database', () => {
   let database = process.env.DB_NAME || 'buytiktokcoins';
   let ssl = process.env.DB_SSL === 'true';
 
-  // 1) DATABASE_URL (Railway Postgres plugin or standard)
-  if (process.env.DATABASE_URL) {
+  // 1) DATABASE_URL wins (Railway Postgres plugin sets this; do not overwrite with PostgreSQLEndpoint/DB_HOST)
+  if (process.env.DATABASE_URL?.trim()) {
     try {
-      const url = new URL(process.env.DATABASE_URL);
+      const url = new URL(process.env.DATABASE_URL.trim());
       host = url.hostname;
+      
       port = parseInt(url.port || '5432', 10);
       username = url.username;
       password = url.password;
@@ -23,19 +24,21 @@ export default registerAs('database', () => {
       console.error('Failed to parse DATABASE_URL:', error);
     }
   }
-  // 2) Railway/RDS: PostgreSQLEndpoint + PostgresPassword (no DATABASE_URL)
-  const pgEndpoint = process.env.PostgreSQLEndpoint || process.env.POSTGRESQLENDPOINT;
-  const pgPassword = process.env.PostgresPassword || process.env.POSTGRESPASSWORD;
-  if (pgEndpoint) {
-    host = String(pgEndpoint).trim();
-    port = parseInt(process.env.DB_PORT || process.env.PostgresPort || process.env.POSTGRESPORT || '5432', 10);
-    username = process.env.DB_USERNAME || process.env.PostgresUser || process.env.POSTGRESUSER || 'postgres';
-    password = pgPassword || process.env.DB_PASSWORD;
-    database = process.env.DB_NAME || process.env.PostgresDatabase || process.env.POSTGRESDATABASE || 'buytiktokcoins';
-    ssl = true;
+  // 2) Only use PostgreSQLEndpoint / DB_* when DATABASE_URL is not set (e.g. legacy RDS)
+  else {
+    const pgEndpoint = process.env.PostgreSQLEndpoint || process.env.POSTGRESQLENDPOINT;
+    const pgPassword = process.env.PostgresPassword || process.env.POSTGRESPASSWORD;
+    if (pgEndpoint) {
+      host = String(pgEndpoint).trim();
+      port = parseInt(process.env.DB_PORT || process.env.PostgresPort || process.env.POSTGRESPORT || '5432', 10);
+      username = process.env.DB_USERNAME || process.env.PostgresUser || process.env.POSTGRESUSER || 'postgres';
+      password = pgPassword || process.env.DB_PASSWORD;
+      database = process.env.DB_NAME || process.env.PostgresDatabase || process.env.POSTGRESDATABASE || 'buytiktokcoins';
+      ssl = true;
+    }
   }
-  // 3) Explicit DB_* in production: require password and use SSL for remote hosts
-  else if (process.env.RAILWAY_ENVIRONMENT || process.env.NODE_ENV === 'production') {
+  // 3) Production: require password
+  if (process.env.RAILWAY_ENVIRONMENT || process.env.NODE_ENV === 'production') {
     if (!password) {
       console.error('DB_PASSWORD (or DATABASE_URL / PostgresPassword) must be set in production.');
     }
