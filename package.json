@@ -17,6 +17,7 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/src/main.js",
     "db:migrate": "node scripts/run-migrations.js",
+    "db:seed-super-admin": "node scripts/seed-super-admin.js",
     "deploy": "node scripts/run-migrations.js && node dist/src/main.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
