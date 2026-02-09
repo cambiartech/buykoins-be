@@ -42,6 +42,7 @@ function getConfig() {
 
 // Order for existing migrations (dependency order). New files not listed here run last, sorted by name.
 const KNOWN_ORDER = [
+  'create-users-and-admins-tables.sql',
   'create-notifications-table.sql',
   'add-admin-password-otp-fields.sql',
   'add-settings-columns.sql',
