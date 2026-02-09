@@ -6,7 +6,6 @@ buildCommand = "npm run build"
 # Run migrations then start app (automatic on every deploy)
 startCommand = "npm run deploy"
 healthcheckPath = "/api/health"
-# Migrations run before app starts; use 5 min so healthcheck doesn't fail while DB runs
-healthcheckTimeout = 300
+healthcheckTimeout = 100
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 10
