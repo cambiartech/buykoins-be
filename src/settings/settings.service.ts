@@ -93,6 +93,8 @@ export class SettingsService {
         payoutRequestCooldownHours: settings.payoutRequestCooldownHours,
         maxActiveCreditRequests: settings.maxActiveCreditRequests,
         maxActivePayoutRequests: settings.maxActivePayoutRequests,
+        requireBvnForOnboarding: settings.requireBvnForOnboarding || false,
+        requireNinForOnboarding: settings.requireNinForOnboarding || false,
       },
       platformInfo: {
         platformName: settings.platformName,
@@ -334,6 +336,14 @@ export class SettingsService {
 
     if (dto.maxActivePayoutRequests !== undefined) {
       settings.maxActivePayoutRequests = dto.maxActivePayoutRequests;
+    }
+
+    if (dto.requireBvnForOnboarding !== undefined) {
+      settings.requireBvnForOnboarding = dto.requireBvnForOnboarding;
+    }
+
+    if (dto.requireNinForOnboarding !== undefined) {
+      settings.requireNinForOnboarding = dto.requireNinForOnboarding;
     }
 
     settings.updatedBy = updatedBy;

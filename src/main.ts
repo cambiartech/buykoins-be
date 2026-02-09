@@ -15,12 +15,14 @@ async function bootstrap() {
   const apiPrefix = configService.get<string>('app.apiPrefix', 'api');
   app.setGlobalPrefix(apiPrefix);
 
-  // CORS
-  const corsOrigin = configService.get<string>('app.corsOrigin');
+  // CORS: allow single origin or comma-separated list (e.g. for Vercel + localhost)
+  const corsOrigin = configService.get<string>('app.corsOrigin') ?? 'http://localhost:3000';
+  const allowedOrigins = corsOrigin.split(',').map((o) => o.trim()).filter(Boolean);
   app.enableCors({
-    origin: corsOrigin,
+    origin: allowedOrigins.length > 1 ? allowedOrigins : allowedOrigins[0] || corsOrigin,
     credentials: true,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   });
 
   // WebSocket Adapter Configuration

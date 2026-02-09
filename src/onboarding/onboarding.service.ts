@@ -2,6 +2,7 @@ import {
   Injectable,
   ConflictException,
   NotFoundException,
+  BadRequestException,
   Inject,
 } from '@nestjs/common';
 import { Sequelize } from 'sequelize-typescript';
@@ -11,6 +12,8 @@ import { CreateOnboardingRequestDto } from './dto/create-onboarding-request.dto'
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { Admin } from '../admins/entities/admin.entity';
+import { SettingsService } from '../settings/settings.service';
+import { BusinessRulesSettings } from '../settings/interfaces/settings.interface';
 
 @Injectable()
 export class OnboardingService {
@@ -18,6 +21,7 @@ export class OnboardingService {
     @Inject('SEQUELIZE') private sequelize: Sequelize,
     private notificationsService: NotificationsService,
     private notificationsGateway: NotificationsGateway,
+    private settingsService: SettingsService,
   ) {}
 
   /**
@@ -32,6 +36,28 @@ export class OnboardingService {
 
     if (user.onboardingStatus === OnboardingStatus.COMPLETED) {
       throw new ConflictException('You have already completed onboarding');
+    }
+
+    // Get business rules settings
+    const businessRules = await this.settingsService.getSettingsByCategory('business-rules') as BusinessRulesSettings;
+
+    // Check if BVN or NIN is required
+    const requiresIdentity = businessRules.requireBvnForOnboarding || businessRules.requireNinForOnboarding;
+    
+    if (requiresIdentity) {
+      const identity = user.sudoCustomerOnboardingData?.identity;
+      const isVerified = identity?.verified === true;
+      
+      // User needs to have verified identity
+      if (!isVerified) {
+        const requiredDocs = [];
+        if (businessRules.requireBvnForOnboarding) requiredDocs.push('BVN');
+        if (businessRules.requireNinForOnboarding) requiredDocs.push('NIN');
+        
+        throw new BadRequestException(
+          `${requiredDocs.join(' or ')} verification is required for onboarding. Please verify your identity before submitting an onboarding request.`,
+        );
+      }
     }
 
     // Check if user has a pending onboarding request
@@ -91,12 +117,23 @@ export class OnboardingService {
    */
   async getOnboardingStatus(userId: string) {
     const user = await User.findByPk(userId, {
-      attributes: ['id', 'onboardingStatus'],
+      attributes: ['id', 'onboardingStatus', 'sudoCustomerOnboardingData'],
     });
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
+
+    // Get business rules settings
+    const businessRules = await this.settingsService.getSettingsByCategory('business-rules') as BusinessRulesSettings;
+
+    // Check identity verification status
+    const identity = user.sudoCustomerOnboardingData?.identity;
+    const isVerified = identity?.verified === true;
+    const identityType = identity?.identityType;
+
+    // User can submit if they have verified identity (when required)
+    const requiresIdentity = businessRules.requireBvnForOnboarding || businessRules.requireNinForOnboarding;
 
     // Get latest onboarding request
     const latestRequest = await OnboardingRequest.findOne({
@@ -107,6 +144,13 @@ export class OnboardingService {
 
     return {
       onboardingStatus: user.onboardingStatus,
+      requirements: {
+        bvnRequired: businessRules.requireBvnForOnboarding,
+        ninRequired: businessRules.requireNinForOnboarding,
+        hasVerifiedIdentity: isVerified,
+        identityType: identityType || null,
+        canSubmitRequest: !requiresIdentity || isVerified,
+      },
       latestRequest: latestRequest
         ? {
             id: latestRequest.id,

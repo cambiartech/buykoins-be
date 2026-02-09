@@ -39,6 +39,8 @@ export interface BusinessRulesSettings {
   payoutRequestCooldownHours: number;
   maxActiveCreditRequests: number;
   maxActivePayoutRequests: number;
+  requireBvnForOnboarding: boolean;
+  requireNinForOnboarding: boolean;
 }
 
 export interface PlatformInfoSettings {

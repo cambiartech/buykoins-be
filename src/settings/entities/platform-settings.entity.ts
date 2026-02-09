@@ -219,6 +219,20 @@ export class PlatformSettings extends Model<PlatformSettings> {
   })
   declare maxActivePayoutRequests: number;
 
+  @Column({
+    type: DataType.BOOLEAN,
+    defaultValue: false,
+    field: 'require_bvn_for_onboarding',
+  })
+  declare requireBvnForOnboarding: boolean;
+
+  @Column({
+    type: DataType.BOOLEAN,
+    defaultValue: false,
+    field: 'require_nin_for_onboarding',
+  })
+  declare requireNinForOnboarding: boolean;
+
   // Platform Information
   @Column({
     type: DataType.STRING(100),

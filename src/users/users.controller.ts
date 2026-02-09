@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Patch,
+  Post,
   Body,
   UseGuards,
   HttpCode,
@@ -12,6 +13,7 @@ import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { VerifyIdentityDto } from './dto/verify-identity.dto';
 
 @ApiTags('Users')
 @Controller('user')
@@ -159,6 +161,53 @@ export class UsersController {
       success: true,
       message: 'Profile updated successfully',
       data,
+    };
+  }
+
+  @Post('verify-identity')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify and save user identity (BVN or NIN)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Identity verified successfully',
+    schema: {
+      example: {
+        success: true,
+        message: 'BVN verified successfully',
+        data: {
+          identity: {
+            identityType: 'BVN',
+            verified: true,
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Identity already verified or invalid data',
+    schema: {
+      example: {
+        statusCode: 400,
+        message: 'You have already verified your BVN. If you need to update it, please contact support.',
+        error: 'Bad Request',
+      },
+    },
+  })
+  async verifyIdentity(
+    @CurrentUser() user: any,
+    @Body() verifyIdentityDto: VerifyIdentityDto,
+  ) {
+    const result = await this.usersService.verifyIdentity(
+      user.id,
+      verifyIdentityDto,
+    );
+    return {
+      success: result.success,
+      message: result.message,
+      data: {
+        identity: result.identity,
+      },
     };
   }
 }

@@ -13,12 +13,16 @@ export class SocketIOAdapter extends IoAdapter {
   createIOServer(port: number, options?: ServerOptions) {
     const corsOrigin = this.configService.get<string>('app.corsOrigin') || '*';
     const nodeEnv = this.configService.get<string>('app.nodeEnv') || 'development';
-    
-    // In development, allow all origins. In production, use configured origin
-    const allowedOrigin = nodeEnv === 'development' || corsOrigin === '*' 
-      ? true 
-      : corsOrigin;
-    
+    const origins = corsOrigin.split(',').map((o) => o.trim()).filter(Boolean);
+
+    // In development, allow all origins. In production, use configured origin(s)
+    const allowedOrigin =
+      nodeEnv === 'development' || corsOrigin === '*'
+        ? true
+        : origins.length > 1
+          ? origins
+          : origins[0] || corsOrigin;
+
     const server = super.createIOServer(port, {
       ...options,
       cors: {

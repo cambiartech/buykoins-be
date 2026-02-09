@@ -1,15 +1,20 @@
-import { Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
 import { Sequelize } from 'sequelize-typescript';
 import { User, OnboardingStatus } from './entities/user.entity';
 import { CreditRequest, CreditRequestStatus } from '../credit-requests/entities/credit-request.entity';
 import { Transaction, TransactionType, TransactionStatus } from '../transactions/entities/transaction.entity';
 import { Payout, PayoutStatus } from '../payouts/entities/payout.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { VerifyIdentityDto } from './dto/verify-identity.dto';
+import { SudoApiService } from '../cards/sudo/sudo-api.service';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class UsersService {
   constructor(
     @Inject('SEQUELIZE') private sequelize: Sequelize,
+    private sudoApiService: SudoApiService,
+    private configService: ConfigService,
   ) {}
 
   /**
@@ -281,6 +286,136 @@ export class UsersService {
       joinedAt: user.joinedAt,
       updatedAt: user.updatedAt,
     };
+  }
+
+  /**
+   * Verify user identity with Sudo API (BVN or NIN)
+   * Creates Sudo customer if needed, using organization billing address
+   */
+  async verifyIdentity(userId: string, verifyIdentityDto: VerifyIdentityDto) {
+    const user = await User.findByPk(userId);
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Check if user already has Sudo customer (already verified)
+    const existingSudoCustomer = await this.sequelize.models.SudoCustomer.findOne({
+      where: { userId },
+    });
+
+    if (existingSudoCustomer) {
+      // User already has Sudo customer - mark as verified
+      const currentData = user.sudoCustomerOnboardingData || {};
+      user.sudoCustomerOnboardingData = {
+        ...currentData,
+        identity: {
+          identityType: verifyIdentityDto.identityType,
+          verified: true,
+          verifiedAt: new Date().toISOString(),
+        },
+        onboardingCompleted: true,
+      };
+      await user.save();
+
+      return {
+        success: true,
+        message: `${verifyIdentityDto.identityType} already verified (Sudo customer exists)`,
+        identity: {
+          identityType: verifyIdentityDto.identityType,
+          verified: true,
+        },
+      };
+    }
+
+    try {
+      // Get organization billing address from config
+      const billingAddress = {
+        line1: this.configService.get<string>('sudo.defaultBillingLine1') || '123 Main Street',
+        line2: this.configService.get<string>('sudo.defaultBillingLine2') || '',
+        city: this.configService.get<string>('sudo.defaultBillingCity') || 'Lagos',
+        state: this.configService.get<string>('sudo.defaultBillingState') || 'Lagos',
+        postalCode: this.configService.get<string>('sudo.defaultBillingPostalCode') || '100001',
+        country: this.configService.get<string>('sudo.defaultBillingCountry') || 'NG',
+      };
+
+      // Create Sudo customer with identity verification
+      const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username;
+      const customerData = {
+        type: 'individual' as const,
+        name: fullName,
+        phoneNumber: user.phone || '+2348000000000',
+        emailAddress: user.email,
+        status: 'active' as const,
+        billingAddress,
+        individual: {
+          firstName: user.firstName || user.username,
+          lastName: user.lastName || user.username,
+          dob: verifyIdentityDto.dob || '1990-01-01',
+          identity: {
+            type: verifyIdentityDto.identityType,
+            number: verifyIdentityDto.identityNumber,
+          },
+        },
+        metadata: {
+          platformUserId: userId,
+          username: user.username,
+        },
+      };
+
+      // Call Sudo API to create customer and verify identity
+      const sudoCustomerData = await this.sudoApiService.createCustomer(customerData);
+
+      // Get customer ID (Sudo uses _id)
+      const customerId = (sudoCustomerData as any)?._id || sudoCustomerData.id;
+      if (!customerId) {
+        throw new BadRequestException('Failed to create Sudo customer: No customer ID returned');
+      }
+
+      // Store Sudo customer in database
+      await this.sequelize.models.SudoCustomer.create({
+        userId,
+        sudoCustomerId: customerId,
+      } as any);
+
+      // Update user with verified identity (but NOT the BVN/NIN number!)
+      const currentData = user.sudoCustomerOnboardingData || {};
+      user.sudoCustomerOnboardingData = {
+        ...currentData,
+        dob: verifyIdentityDto.dob || currentData.dob,
+        sudoCustomerId: customerId,
+        billingAddress, // Store organization billing address used
+        identity: {
+          identityType: verifyIdentityDto.identityType,
+          verified: true,
+          verifiedAt: new Date().toISOString(),
+          // DO NOT store identityNumber!
+        },
+        onboardingCompleted: true,
+      };
+
+      await user.save();
+
+      return {
+        success: true,
+        message: `${verifyIdentityDto.identityType} verified successfully with Sudo`,
+        identity: {
+          identityType: verifyIdentityDto.identityType,
+          verified: true,
+        },
+      };
+    } catch (error: any) {
+      // Handle Sudo API errors
+      if (error.response?.data) {
+        const sudoError = error.response.data;
+        throw new BadRequestException(
+          `Identity verification failed: ${sudoError.message || 'Invalid BVN/NIN or data mismatch'}`,
+        );
+      }
+      throw new BadRequestException(
+        `Identity verification failed: ${error.message || 'Unable to verify identity'}`,
+      );
+    }
   }
 }
 

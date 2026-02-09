@@ -43,6 +43,7 @@ import { ApproveCreditRequestDto } from './dto/approve-credit-request.dto';
 import { RejectCreditRequestDto } from './dto/reject-credit-request.dto';
 import { CompleteOnboardingDto } from './dto/complete-onboarding.dto';
 import { ProcessPayoutDto } from './dto/process-payout.dto';
+import { CompleteManualPayoutDto } from './dto/complete-manual-payout.dto';
 import { RejectPayoutDto } from './dto/reject-payout.dto';
 import { ProvideWidgetCredentialsDto } from './dto/provide-widget-credentials.dto';
 import { WidgetService } from '../widget/widget.service';
@@ -445,6 +446,44 @@ export class AdminsController {
     return {
       success: true,
       message: 'Payout processed successfully',
+      data,
+    };
+  }
+
+  @Post('payouts/:id/complete-manual')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Complete payout manually',
+    description:
+      'Use when Sudo transfer failed. Admin confirms they credited the user externally; provide transaction reference (e.g. bank ref or screenshot ID).',
+  })
+  @ApiResponse({ status: 200, description: 'Payout completed manually' })
+  @ApiResponse({ status: 404, description: 'Payout not found' })
+  @ApiResponse({ status: 400, description: 'Payout already processed or insufficient balance' })
+  async completeManualPayout(
+    @Param('id') id: string,
+    @CurrentUser() admin: CurrentUserPayload,
+    @Body() dto: CompleteManualPayoutDto,
+  ) {
+    const data = await this.adminsService.completeManualPayout(id, admin.id, dto);
+    return {
+      success: true,
+      message: 'Payout completed manually',
+      data,
+    };
+  }
+
+  @Get('payouts/transfer-status/:transferId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get Sudo transfer status (reconciliation/disputes)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Transfer status from Sudo',
+  })
+  async getPayoutTransferStatus(@Param('transferId') transferId: string) {
+    const data = await this.adminsService.getPayoutTransferStatus(transferId);
+    return {
+      success: true,
       data,
     };
   }

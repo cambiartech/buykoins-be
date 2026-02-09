@@ -134,11 +134,11 @@ export interface CreateCardDto {
 
 export interface FundTransferDto {
   debitAccountId: string; // The account to debit from (settlement account)
-  creditAccountId: string; // The account to credit to (card account)
+  creditAccountId?: string; // The account to credit to (for internal/card funding)
   amount: number; // Amount to transfer
-  narration?: string; // Optional narration
-  paymentReference?: string; // Optional payment reference
-  // For external transfers (not used for card funding):
+  narration?: string;
+  paymentReference?: string;
+  /** For payout to external bank - use with beneficiaryAccountNumber (omit creditAccountId) */
   beneficiaryBankCode?: string;
   beneficiaryAccountNumber?: string;
 }
@@ -515,34 +515,62 @@ export class SudoApiService {
       const payload: any = {
         debitAccountId: data.debitAccountId,
         amount: data.amount,
-        creditAccountId: data.creditAccountId,
       };
 
-      if (data.narration) {
-        payload.narration = data.narration;
-      }
-
-      if (data.paymentReference) {
-        payload.paymentReference = data.paymentReference;
-      }
-
-      // For external transfers (not used for card funding)
-      if (data.beneficiaryBankCode) {
+      // Either creditAccountId (internal) OR beneficiaryBankCode + beneficiaryAccountNumber (payout to bank)
+      if (data.beneficiaryBankCode && data.beneficiaryAccountNumber) {
         payload.beneficiaryBankCode = data.beneficiaryBankCode;
+        payload.beneficiaryAccountNumber = data.beneficiaryAccountNumber;
+      } else if (data.creditAccountId) {
+        payload.creditAccountId = data.creditAccountId;
+      } else {
+        throw new HttpException(
+          'Either creditAccountId or (beneficiaryBankCode + beneficiaryAccountNumber) is required',
+          HttpStatus.BAD_REQUEST,
+        );
       }
 
-      if (data.beneficiaryAccountNumber) {
-        payload.beneficiaryAccountNumber = data.beneficiaryAccountNumber;
-      }
+      if (data.narration) payload.narration = data.narration;
+      if (data.paymentReference) payload.paymentReference = data.paymentReference;
 
       this.logger.debug(`Fund transfer payload: ${JSON.stringify(payload)}`);
       const response = await this.axiosInstance.post('/accounts/transfer', payload);
-      this.logger.debug(`Fund transfer response: ${JSON.stringify(response.data)}`);
-      
-      // Sudo returns: { statusCode: 200, message: "...", data: {...} }
-      return response.data.data || response.data;
+
+      // Console log Sudo response for payout debugging (remove in production if desired)
+      console.log('=== SUDO FUND TRANSFER RESPONSE ===');
+      console.log(JSON.stringify(response.data, null, 2));
+      console.log('====================================');
+
+      // Sudo may return HTTP 200 with body { statusCode: 400, message: "..." } - treat as failure
+      const resBody = response.data;
+      const statusCode = resBody?.statusCode ?? response.status;
+      if (typeof statusCode === 'number' && statusCode >= 400) {
+        const msg = resBody?.message || resBody?.error || 'Transfer failed';
+        throw new HttpException(msg, statusCode);
+      }
+      // Also treat body with error responseCode and no success payload as failure
+      if (resBody?.responseCode && !(resBody?.data ?? resBody?.id ?? resBody?._id)) {
+        const msg = resBody?.message || resBody?.error || 'Transfer failed';
+        throw new HttpException(msg, HttpStatus.BAD_REQUEST);
+      }
+
+      return resBody?.data || resBody;
     } catch (error: any) {
       this.handleError(error, 'Failed to transfer funds');
+      throw error;
+    }
+  }
+
+  /**
+   * Get transfer status (for reconciliation/disputes)
+   * See: https://docs.sudo.africa/reference/fund-transfer
+   */
+  async getTransferStatus(transferId: string): Promise<any> {
+    try {
+      const response = await this.axiosInstance.get(`/accounts/transfers/${transferId}`);
+      return response.data.data || response.data;
+    } catch (error: any) {
+      this.handleError(error, 'Failed to get transfer status');
       throw error;
     }
   }
@@ -569,6 +597,39 @@ export class SudoApiService {
       return response.data.data;
     } catch (error: any) {
       this.handleError(error, 'Failed to generate card token');
+      throw error;
+    }
+  }
+
+  /**
+   * Get list of banks for Nigeria
+   */
+  async getBanksList(country: string = 'NG'): Promise<any> {
+    try {
+      this.logger.debug(`Fetching banks list for country: ${country}`);
+      const response = await this.axiosInstance.get('/accounts/banks', {
+        params: { country },
+      });
+      return response.data;
+    } catch (error: any) {
+      this.logger.error(`Failed to fetch banks list: ${JSON.stringify(error.response?.data)}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Name enquiry - Get account name for bank account
+   */
+  async nameEnquiry(bankCode: string, accountNumber: string): Promise<any> {
+    try {
+      this.logger.debug(`Name enquiry for bank: ${bankCode}, account: ${accountNumber}`);
+      const response = await this.axiosInstance.post('/accounts/transfer/name-enquiry', {
+        bankCode,
+        accountNumber,
+      });
+      return response.data;
+    } catch (error: any) {
+      this.logger.error(`Name enquiry failed: ${JSON.stringify(error.response?.data)}`);
       throw error;
     }
   }

@@ -18,6 +18,7 @@ import { BankAccount } from '../bank-accounts/entities/bank-account.entity';
 import { StorageService } from '../storage/storage.service';
 import { Payout, PayoutStatus } from '../payouts/entities/payout.entity';
 import { ProcessPayoutDto } from './dto/process-payout.dto';
+import { CompleteManualPayoutDto } from './dto/complete-manual-payout.dto';
 import { RejectPayoutDto } from './dto/reject-payout.dto';
 import { Admin, AdminRole, AdminStatus } from './entities/admin.entity';
 import { DEFAULT_ADMIN_PERMISSIONS, PermissionGroups, ALL_PERMISSIONS } from './permissions.constants';
@@ -29,6 +30,8 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { SenderType } from '../support/entities/support-message.entity';
 import { SupportService } from '../support/support.service';
+import { SudoApiService } from '../cards/sudo/sudo-api.service';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class AdminsService {
@@ -39,6 +42,8 @@ export class AdminsService {
     private supportService: SupportService,
     private notificationsService: NotificationsService,
     private notificationsGateway: NotificationsGateway,
+    private sudoApiService: SudoApiService,
+    private configService: ConfigService,
   ) {}
 
   /**
@@ -892,7 +897,7 @@ export class AdminsService {
   }
 
   /**
-   * Process/Approve payout
+   * Process/Approve payout - Settles via Sudo (debit settlement account, credit user bank)
    */
   async processPayout(payoutId: string, adminId: string, processDto: ProcessPayoutDto) {
     const payout = await Payout.findByPk(payoutId, {
@@ -909,13 +914,11 @@ export class AdminsService {
       );
     }
 
-    // Get user
     const user = await User.findByPk(payout.userId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    // Check if user has sufficient balance
     const currentEarnings = Number(user.earnings || 0);
     const payoutAmount = Number(payout.amount);
     if (currentEarnings < payoutAmount) {
@@ -924,31 +927,77 @@ export class AdminsService {
       );
     }
 
-    // Use transaction to ensure atomicity
-    const transaction = await this.sequelize.transaction();
+    const bankAccount = payout.bankAccount as { accountNumber: string; accountName: string; bankName: string; bankCode: string };
+    if (!bankAccount?.bankCode || !bankAccount?.accountNumber) {
+      throw new BadRequestException('Payout bank account details (bankCode, accountNumber) are required');
+    }
 
+    const sudoConfig = this.configService.get('sudo');
+    const settlementAccountId = sudoConfig?.defaultSettlementAccountId || sudoConfig?.defaultDebitAccountId;
+    if (!settlementAccountId) {
+      throw new BadRequestException(
+        'Settlement account not configured. Please set SUDO_DEFAULT_SETTLEMENT_ACCOUNT_ID or SUDO_DEFAULT_DEBIT_ACCOUNT_ID.',
+      );
+    }
+
+    const netAmountNgn = Number(payout.netAmount);
+    const paymentReference = `PAYOUT_${payoutId}_${Date.now()}`;
+    const narration = `Buykoins payout to ${bankAccount.accountName || 'user'} - Payout ${payoutId}`;
+
+    let transferResult: any;
     try {
-      // Update payout status
+      transferResult = await this.sudoApiService.fundTransfer({
+        debitAccountId: settlementAccountId,
+        amount: netAmountNgn,
+        beneficiaryBankCode: bankAccount.bankCode,
+        beneficiaryAccountNumber: bankAccount.accountNumber,
+        narration,
+        paymentReference,
+      });
+    } catch (sudoError: any) {
+      const sudoMessage = sudoError.response?.data?.message || sudoError.message || 'Sudo transfer failed';
+      throw new BadRequestException({
+        message: `Payout settlement failed: ${sudoMessage}`,
+        errorCode: 'SUDO_TRANSFER_FAILED',
+        sudoError: sudoMessage,
+        hint: 'You can complete this payout manually (admin will add reference/screenshot) or cancel.',
+      });
+    }
+
+    const sudoTransferId = (transferResult as any)?._id || (transferResult as any)?.id || paymentReference;
+    return this.applyPayoutCompletion(payout, user, adminId, processDto.transactionReference || sudoTransferId, processDto.notes);
+  }
+
+  /**
+   * Apply payout completion (update DB, deduct balance, create transaction, email, notification).
+   * Used by processPayout (after Sudo success) and completeManualPayout.
+   */
+  private async applyPayoutCompletion(
+    payout: Payout,
+    user: User,
+    adminId: string,
+    transactionReference: string,
+    notes?: string,
+  ) {
+    const payoutAmount = Number(payout.amount);
+    const currentEarnings = Number(user.earnings || 0);
+    const bankAccount = payout.bankAccount as { accountNumber: string; accountName: string; bankName: string; bankCode: string };
+    const payoutId = payout.id;
+
+    const transaction = await this.sequelize.transaction();
+    try {
       payout.status = PayoutStatus.COMPLETED;
       payout.processedAt = new Date();
       payout.completedAt = new Date();
       payout.processedBy = adminId;
-      if (processDto.transactionReference) {
-        payout.transactionReference = processDto.transactionReference;
-      }
-      if (processDto.notes) {
-        payout.notes = processDto.notes;
-      }
+      payout.transactionReference = transactionReference;
+      if (notes != null) payout.notes = notes;
       await payout.save({ transaction });
 
-      // Deduct from user balance
       user.earnings = currentEarnings - payoutAmount;
       await user.save({ transaction });
 
-      // Calculate exchange rate used (from payout data)
       const exchangeRate = Number(payout.amountInNgn) / Number(payout.amount);
-
-      // Create transaction record with finance data
       await Transaction.create(
         {
           userId: user.id,
@@ -959,7 +1008,7 @@ export class AdminsService {
           processingFee: Number(payout.processingFee),
           netAmount: Number(payout.netAmount),
           status: TransactionStatus.COMPLETED,
-          description: `Payout to ${payout.bankAccount.bankName} ${payout.bankAccount.accountNumber} - Payout ${payoutId}`,
+          description: `Payout to ${bankAccount?.bankName || 'bank'} ${bankAccount?.accountNumber || ''} - Payout ${payoutId}`,
           referenceId: payoutId,
           date: new Date(),
         } as any,
@@ -968,7 +1017,6 @@ export class AdminsService {
 
       await transaction.commit();
 
-      // Send payout completed email
       try {
         await this.emailService.sendPayoutCompletedEmail(
           user.email,
@@ -977,11 +1025,9 @@ export class AdminsService {
           payout.transactionReference || 'N/A',
         );
       } catch (emailError) {
-        // Log error but don't fail the payout process
         console.error('Failed to send payout completed email:', emailError);
       }
 
-      // Send notification
       try {
         const notification = await this.notificationsService.notifyPayoutCompleted(
           user.id,
@@ -999,12 +1045,55 @@ export class AdminsService {
         processedAt: payout.processedAt,
         completedAt: payout.completedAt,
         processedBy: payout.processedBy,
+        transactionReference: payout.transactionReference,
         userBalance: Number(user.earnings || 0),
       };
     } catch (error) {
       await transaction.rollback();
       throw error;
     }
+  }
+
+  /**
+   * Complete a payout manually (no Sudo). Use when Sudo transfer failed and admin has credited the user externally.
+   * Requires transactionReference (e.g. bank ref or screenshot ID).
+   */
+  async completeManualPayout(payoutId: string, adminId: string, dto: CompleteManualPayoutDto) {
+    const payout = await Payout.findByPk(payoutId, {
+      include: [{ model: User, as: 'user' }],
+    });
+
+    if (!payout) {
+      throw new NotFoundException('Payout not found');
+    }
+
+    if (payout.status !== PayoutStatus.PENDING) {
+      throw new BadRequestException(
+        `Payout is already ${payout.status}. Only pending payouts can be completed manually.`,
+      );
+    }
+
+    const user = await User.findByPk(payout.userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const currentEarnings = Number(user.earnings || 0);
+    const payoutAmount = Number(payout.amount);
+    if (currentEarnings < payoutAmount) {
+      throw new BadRequestException(
+        `User has insufficient balance. Current balance: $${currentEarnings.toFixed(2)}, Required: $${payoutAmount.toFixed(2)}`,
+      );
+    }
+
+    return this.applyPayoutCompletion(payout, user, adminId, dto.transactionReference, dto.notes);
+  }
+
+  /**
+   * Get Sudo transfer status (for reconciliation/disputes)
+   */
+  async getPayoutTransferStatus(transferId: string) {
+    return this.sudoApiService.getTransferStatus(transferId);
   }
 
   /**

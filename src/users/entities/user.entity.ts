@@ -162,6 +162,7 @@ export class User extends Model<User> {
   })
   declare sudoCustomerOnboardingData: {
     dob?: string;
+    sudoCustomerId?: string;
     billingAddress?: {
       line1?: string;
       line2?: string;
@@ -172,7 +173,9 @@ export class User extends Model<User> {
     };
     identity?: {
       identityType?: 'BVN' | 'NIN';
-      identityNumber?: string;
+      identityNumber?: string; // Legacy - should not be stored anymore
+      verified?: boolean;
+      verifiedAt?: string;
     };
     onboardingStep?: string;
     onboardingCompleted?: boolean;

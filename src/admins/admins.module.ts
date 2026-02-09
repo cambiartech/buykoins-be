@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { AdminsController } from './admins.controller';
 import { AdminAuthController } from './admin-auth.controller';
 import { AdminsService } from './admins.service';
@@ -9,9 +10,20 @@ import { EmailModule } from '../email/email.module';
 import { SupportModule } from '../support/support.module';
 import { WidgetModule } from '../widget/widget.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { CardsModule } from '../cards/cards.module';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, StorageModule, EmailModule, SupportModule, WidgetModule, NotificationsModule],
+  imports: [
+    DatabaseModule,
+    AuthModule,
+    StorageModule,
+    EmailModule,
+    SupportModule,
+    WidgetModule,
+    NotificationsModule,
+    ConfigModule,
+    CardsModule,
+  ],
   controllers: [AdminsController, AdminAuthController],
   providers: [AdminsService],
   exports: [AdminsService],

@@ -10,14 +10,17 @@ import { BankAccount } from './entities/bank-account.entity';
 import { User } from '../users/entities/user.entity';
 import { AddBankAccountDto } from './dto/add-bank-account.dto';
 import { VerifyBankAccountDto } from './dto/verify-bank-account.dto';
+import { NameEnquiryDto } from './dto/name-enquiry.dto';
 import { VerificationCodeUtil } from '../auth/utils/verification-code.util';
 import { EmailService } from '../email/email.service';
+import { SudoApiService } from '../cards/sudo/sudo-api.service';
 
 @Injectable()
 export class BankAccountsService {
   constructor(
     @Inject('SEQUELIZE') private sequelize: Sequelize,
     private emailService: EmailService,
+    private sudoApiService: SudoApiService,
   ) {}
 
   /**
@@ -351,6 +354,36 @@ export class BankAccountsService {
       message: 'Bank account deleted successfully',
     };
   }
-}
 
+  /**
+   * Get list of Nigerian banks from Sudo
+   */
+  async getBanksList(country: string = 'NG'): Promise<any> {
+    try {
+      const response = await this.sudoApiService.getBanksList(country);
+      return response;
+    } catch (error: any) {
+      throw new BadRequestException(
+        error.message || 'Failed to fetch banks list',
+      );
+    }
+  }
+
+  /**
+   * Name enquiry - Get account name from Sudo
+   */
+  async nameEnquiry(nameEnquiryDto: NameEnquiryDto): Promise<any> {
+    try {
+      const response = await this.sudoApiService.nameEnquiry(
+        nameEnquiryDto.bankCode,
+        nameEnquiryDto.accountNumber,
+      );
+      return response;
+    } catch (error: any) {
+      throw new BadRequestException(
+        error.message || 'Failed to verify account details',
+      );
+    }
+  }
+}
 

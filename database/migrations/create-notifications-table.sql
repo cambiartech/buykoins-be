@@ -1,3 +1,9 @@
+-- Notifications table (required for payout-completed and other in-app notifications).
+-- Run with: psql $DATABASE_URL -f database/migrations/create-notifications-table.sql
+--
+-- Ensure UUID extension exists (required for uuid_generate_v4())
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 -- Create notifications table
 CREATE TABLE IF NOT EXISTS notifications (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -39,7 +45,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_update_notifications_updated_at ON notifications;
 CREATE TRIGGER trigger_update_notifications_updated_at
 BEFORE UPDATE ON notifications
 FOR EACH ROW
-EXECUTE FUNCTION update_notifications_updated_at();
+EXECUTE PROCEDURE update_notifications_updated_at();

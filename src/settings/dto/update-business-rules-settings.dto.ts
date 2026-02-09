@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsNumber, Min } from 'class-validator';
+import { IsOptional, IsNumber, Min, IsBoolean } from 'class-validator';
 
 export class UpdateBusinessRulesSettingsDto {
   @ApiProperty({
@@ -61,5 +61,23 @@ export class UpdateBusinessRulesSettingsDto {
   @IsNumber()
   @Min(1, { message: 'Max active payout requests must be at least 1' })
   maxActivePayoutRequests?: number;
+
+  @ApiProperty({
+    example: false,
+    description: 'Require BVN for onboarding',
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  requireBvnForOnboarding?: boolean;
+
+  @ApiProperty({
+    example: false,
+    description: 'Require NIN for onboarding',
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  requireNinForOnboarding?: boolean;
 }
 

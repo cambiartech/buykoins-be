@@ -4,6 +4,7 @@ import {
   Post,
   Delete,
   Param,
+  Query,
   Body,
   UseGuards,
   HttpCode,
@@ -14,12 +15,14 @@ import {
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { BankAccountsService } from './bank-accounts.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AddBankAccountDto } from './dto/add-bank-account.dto';
 import { VerifyBankAccountDto } from './dto/verify-bank-account.dto';
+import { NameEnquiryDto } from './dto/name-enquiry.dto';
 
 @ApiTags('Bank Accounts')
 @Controller('user/bank-accounts')
@@ -131,6 +134,72 @@ export class BankAccountsController {
       ...data,
     };
   }
-}
 
+  @Get('banks')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get list of Nigerian banks' })
+  @ApiQuery({
+    name: 'country',
+    required: false,
+    description: 'Country code (default: NG)',
+    example: 'NG',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Banks list retrieved successfully',
+    schema: {
+      example: {
+        success: true,
+        data: {
+          banks: [
+            {
+              code: '011',
+              name: 'First Bank of Nigeria',
+            },
+            {
+              code: '058',
+              name: 'Guaranty Trust Bank',
+            },
+          ],
+        },
+      },
+    },
+  })
+  async getBanksList(@Query('country') country?: string) {
+    const data = await this.bankAccountsService.getBanksList(country || 'NG');
+    return {
+      success: true,
+      data,
+    };
+  }
+
+  @Post('name-enquiry')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get account name for bank account (name enquiry)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Account name retrieved successfully',
+    schema: {
+      example: {
+        success: true,
+        data: {
+          accountName: 'JOHN DOE',
+          accountNumber: '1234567890',
+          bankCode: '011',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid account number or bank code',
+  })
+  async nameEnquiry(@Body() nameEnquiryDto: NameEnquiryDto) {
+    const data = await this.bankAccountsService.nameEnquiry(nameEnquiryDto);
+    return {
+      success: true,
+      data,
+    };
+  }
+}
 
