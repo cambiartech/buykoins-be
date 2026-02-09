@@ -3,7 +3,8 @@ builder = "nixpacks"
 buildCommand = "npm run build"
 
 [deploy]
-startCommand = "node dist/src/main.js"
+# Run migrations then start app (automatic on every deploy)
+startCommand = "npm run deploy"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 100
 restartPolicyType = "on_failure"
