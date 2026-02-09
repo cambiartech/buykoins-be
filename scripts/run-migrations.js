@@ -150,3 +150,6 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
+
+// railway run npm run db:seed-super-admin
