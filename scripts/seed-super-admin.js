@@ -71,7 +71,7 @@ async function main() {
     await client.query(
       `INSERT INTO admins (email, password, first_name, last_name, role, status)
        VALUES ($1, $2, $3, $4, $5, $6)`,
-      [email, hashedPassword, 'Super', 'Admin', 'admin', 'active']
+      [email, hashedPassword, 'Super', 'Admin', 'super_admin', 'active']
     );
     console.log('Super admin created:', email);
   } catch (err) {
