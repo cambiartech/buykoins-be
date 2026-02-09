@@ -22,6 +22,8 @@ database/seed*.ts
 database/seed*.js
 **/seed*.ts
 **/seed*.js
+# Exception: deploy-time super admin bootstrap (reads from env only, no secrets in file)
+!scripts/seed-super-admin.js
 
 # IDE and editor files
 .vscode/
