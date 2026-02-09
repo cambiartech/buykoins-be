@@ -31,7 +31,8 @@ function getConfig() {
   };
 }
 
-const MIGRATION_ORDER = [
+// Order for existing migrations (dependency order). New files not listed here run last, sorted by name.
+const KNOWN_ORDER = [
   'create-notifications-table.sql',
   'add-admin-password-otp-fields.sql',
   'add-settings-columns.sql',
@@ -47,6 +48,27 @@ const MIGRATION_ORDER = [
   'fix-support-timestamps-timezone.sql',
 ];
 
+const MIGRATIONS_TABLE = `
+  CREATE TABLE IF NOT EXISTS schema_migrations (
+    name VARCHAR(255) PRIMARY KEY,
+    applied_at TIMESTAMPTZ DEFAULT NOW()
+  );
+`;
+
+function getOrderedMigrations(migrationsDir) {
+  const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql'));
+  const known = KNOWN_ORDER.filter((f) => files.includes(f));
+  const extra = files.filter((f) => !KNOWN_ORDER.includes(f)).sort();
+  return [...known, ...extra];
+}
+
+function isAlreadyAppliedError(err) {
+  return (
+    err.code === '42P07' ||
+    (err.message && err.message.includes('already exists'))
+  );
+}
+
 async function main() {
   const migrationsDir = path.join(__dirname, '..', 'database', 'migrations');
   const config = getConfig();
@@ -60,16 +82,46 @@ async function main() {
     process.exit(1);
   }
 
-  for (const name of MIGRATION_ORDER) {
+  try {
+    await client.query(MIGRATIONS_TABLE);
+  } catch (err) {
+    console.error('Failed to create schema_migrations table:', err.message);
+    await client.end();
+    process.exit(1);
+  }
+
+  if (!fs.existsSync(migrationsDir)) {
+    console.error('Migrations directory not found:', migrationsDir);
+    await client.end();
+    process.exit(1);
+  }
+  const ordered = getOrderedMigrations(migrationsDir);
+  let ran = 0;
+  let skipped = 0;
+
+  for (const name of ordered) {
     const filePath = path.join(migrationsDir, name);
-    if (!fs.existsSync(filePath)) continue;
     const sql = fs.readFileSync(filePath, 'utf8');
+
+    const row = await client.query(
+      'SELECT 1 FROM schema_migrations WHERE name = $1',
+      [name]
+    );
+    if (row.rows.length > 0) {
+      skipped++;
+      continue;
+    }
+
     try {
       await client.query(sql);
+      await client.query('INSERT INTO schema_migrations (name) VALUES ($1)', [name]);
       console.log('Ran:', name);
+      ran++;
     } catch (err) {
-      if (err.code === '42P07' || err.message.includes('already exists')) {
+      if (isAlreadyAppliedError(err)) {
+        await client.query('INSERT INTO schema_migrations (name) VALUES ($1)', [name]).catch(() => {});
         console.log('Skip (already applied):', name);
+        skipped++;
       } else {
         console.error('Migration failed:', name, err.message);
         await client.end();
@@ -79,7 +131,10 @@ async function main() {
   }
 
   await client.end();
-  console.log('Migrations finished.');
+  console.log('Migrations finished. Ran:', ran, 'Skipped (already applied):', skipped);
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
