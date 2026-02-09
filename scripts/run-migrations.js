@@ -44,6 +44,7 @@ function getConfig() {
 const KNOWN_ORDER = [
   'create-users-and-admins-tables.sql',
   'create-platform-settings-table.sql',
+  'create-remaining-core-tables.sql',
   'create-notifications-table.sql',
   'add-admin-password-otp-fields.sql',
   'add-settings-columns.sql',
