@@ -9,8 +9,17 @@ const path = require('path');
 const { Client } = require('pg');
 
 function getConfig() {
-  if (process.env.DATABASE_URL) {
-    return { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } };
+  const databaseUrl = process.env.DATABASE_URL && process.env.DATABASE_URL.trim();
+  if (databaseUrl) {
+    return { connectionString: databaseUrl, ssl: { rejectUnauthorized: false } };
+  }
+  // On Railway we only use DATABASE_URL (never PostgreSQLEndpoint/DB_HOST — remove those in Variables)
+  if (process.env.RAILWAY_ENVIRONMENT) {
+    console.error(
+      'On Railway, DATABASE_URL must be set (e.g. your Postgres service URL). ' +
+        'Remove PostgreSQLEndpoint, PostgresPassword, and DB_HOST from this service Variables so only DATABASE_URL is used.',
+    );
+    process.exit(1);
   }
   const host = process.env.PostgreSQLEndpoint || process.env.DB_HOST;
   const port = parseInt(process.env.DB_PORT || process.env.PostgresPort || '5432', 10);
