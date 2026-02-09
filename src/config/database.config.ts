@@ -9,12 +9,11 @@ export default registerAs('database', () => {
   let database = process.env.DB_NAME || 'buytiktokcoins';
   let ssl = process.env.DB_SSL === 'true';
 
-  // 1) DATABASE_URL wins (Railway Postgres plugin sets this; do not overwrite with PostgreSQLEndpoint/DB_HOST)
+  // 1) DATABASE_URL wins (Railway prod or local when you set it)
   if (process.env.DATABASE_URL?.trim()) {
     try {
       const url = new URL(process.env.DATABASE_URL.trim());
       host = url.hostname;
-      
       port = parseInt(url.port || '5432', 10);
       username = url.username;
       password = url.password;
@@ -24,7 +23,14 @@ export default registerAs('database', () => {
       console.error('Failed to parse DATABASE_URL:', error);
     }
   }
-  // 2) Only use PostgreSQLEndpoint / DB_* when DATABASE_URL is not set (e.g. legacy RDS)
+  // 2) Local dev: use DB_HOST / DB_* only (ignore PostgreSQLEndpoint so .env can have both)
+  else if (process.env.NODE_ENV === 'development' || !process.env.RAILWAY_ENVIRONMENT) {
+    // host/port/username/password/database already set from DB_* at top; ssl off for local
+    if (host === 'localhost' || host === '127.0.0.1') {
+      ssl = false;
+    }
+  }
+  // 3) Prod without DATABASE_URL (e.g. legacy RDS): use PostgreSQLEndpoint
   else {
     const pgEndpoint = process.env.PostgreSQLEndpoint || process.env.POSTGRESQLENDPOINT;
     const pgPassword = process.env.PostgresPassword || process.env.POSTGRESPASSWORD;
@@ -37,7 +43,7 @@ export default registerAs('database', () => {
       ssl = true;
     }
   }
-  // 3) Production: require password
+  // 4) Production: require password
   if (process.env.RAILWAY_ENVIRONMENT || process.env.NODE_ENV === 'production') {
     if (!password) {
       console.error('DB_PASSWORD (or DATABASE_URL / PostgresPassword) must be set in production.');
