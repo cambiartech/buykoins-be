@@ -5,6 +5,7 @@ import {
   Delete,
   Param,
   Query,
+  Body,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -18,17 +19,25 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiQuery,
+  ApiBody,
 } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
+import { NotificationsGateway } from './notifications.gateway';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { BroadcastAnnouncementDto } from './dto/broadcast-announcement.dto';
 
 @ApiTags('Notifications')
 @Controller()
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class NotificationsController {
-  constructor(private readonly notificationsService: NotificationsService) {}
+  constructor(
+    private readonly notificationsService: NotificationsService,
+    private readonly notificationsGateway: NotificationsGateway,
+  ) {}
 
   // ============================================
   // User Notification Endpoints
@@ -293,6 +302,44 @@ export class NotificationsController {
     return {
       success: true,
       message: 'Notification deleted',
+    };
+  }
+
+  @Post('admin/notifications/broadcast')
+  @UseGuards(RolesGuard)
+  @Roles('super_admin')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Broadcast announcement (email blast)',
+    description: 'Send in-app announcement to users. Supports plain or HTML message (messageFormat), and targeting: all users, active only, onboarded only, or specific userIds. See docs/BROADCAST_API.md for frontend.',
+  })
+  @ApiBody({ type: BroadcastAnnouncementDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Announcement created and pushed to targeted users',
+    schema: { example: { success: true, data: { sent: 42 } } },
+  })
+  async broadcastAnnouncement(
+    @CurrentUser() admin: any,
+    @Body() dto: BroadcastAnnouncementDto,
+  ) {
+    const results = await this.notificationsService.broadcastAnnouncement({
+      title: dto.title,
+      message: dto.message,
+      messageFormat: dto.messageFormat ?? 'plain',
+      userIds: dto.userIds,
+      audience: dto.audience ?? 'all',
+    });
+    for (const { userId, notification } of results) {
+      try {
+        await this.notificationsGateway.sendToUser(userId, notification);
+      } catch (err) {
+        // Log but continue; user may be offline
+      }
+    }
+    return {
+      success: true,
+      data: { sent: results.length },
     };
   }
 }

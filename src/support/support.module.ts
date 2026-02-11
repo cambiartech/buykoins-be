@@ -7,12 +7,14 @@ import { SupportController, AdminSupportController } from './support.controller'
 import { DatabaseModule } from '../database/database.module';
 import { AuthModule } from '../auth/auth.module';
 import { StorageModule } from '../storage/storage.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
     DatabaseModule,
     AuthModule,
     StorageModule,
+    NotificationsModule,
     ConfigModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

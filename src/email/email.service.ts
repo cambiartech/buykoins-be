@@ -6,6 +6,8 @@ import { WelcomeEmailTemplate } from './templates/welcome-email.template';
 import { CreditApprovedEmailTemplate } from './templates/credit-approved.template';
 import { CreditRejectedEmailTemplate } from './templates/credit-rejected.template';
 import { PayoutCompletedEmailTemplate } from './templates/payout-completed.template';
+import { WelcomeAfterSignupTemplate } from './templates/welcome-after-signup.template';
+import { OnboardingCompleteTemplate } from './templates/onboarding-complete.template';
 
 @Injectable()
 export class EmailService {
@@ -20,7 +22,7 @@ export class EmailService {
 
     this.fromEmail = postmarkConfig?.fromEmail || 'noreply@buykoins.com';
     this.fromName = postmarkConfig?.fromName || 'Buykoins';
-    this.replyTo = postmarkConfig?.replyTo;
+    this.replyTo = postmarkConfig?.replyTo || this.configService.get<string>('app.adminEmail') || 'operations@buykoins.com';
 
     // Initialize Postmark client if API key is provided
     if (apiKey) {
@@ -117,17 +119,41 @@ export class EmailService {
   }
 
   /**
-   * Send welcome email after onboarding completion
+   * Send welcome email after signup (before onboarding). Promotional: onboarding, card, payouts.
+   */
+  async sendWelcomeAfterSignup(email: string, firstName?: string) {
+    const subject = 'Welcome to Buykoins – Next steps to get paid';
+    const assetsBaseUrl = this.configService.get('postmark.assetsBaseUrl') ||
+      this.configService.get('aws.r2.publicUrl') ||
+      'https://storage.buykoins.com';
+    const htmlBody = WelcomeAfterSignupTemplate.getHtml(firstName || '', assetsBaseUrl);
+    const textBody = WelcomeAfterSignupTemplate.getText(firstName || '');
+    await this.sendEmail(email, subject, htmlBody, textBody);
+  }
+
+  /**
+   * Send onboarding complete email (account verified by admin)
+   */
+  async sendOnboardingCompleteEmail(email: string, firstName?: string) {
+    const subject = 'Your account is verified – You can now request payouts';
+    const assetsBaseUrl = this.configService.get('postmark.assetsBaseUrl') ||
+      this.configService.get('aws.r2.publicUrl') ||
+      'https://storage.buykoins.com';
+    const htmlBody = OnboardingCompleteTemplate.getHtml(firstName || '', assetsBaseUrl);
+    const textBody = OnboardingCompleteTemplate.getText(firstName || '');
+    await this.sendEmail(email, subject, htmlBody, textBody);
+  }
+
+  /**
+   * Send welcome email after onboarding completion (legacy; prefer sendOnboardingCompleteEmail)
    */
   async sendWelcomeEmail(email: string, firstName: string) {
-    const subject = 'Welcome to Buykoins - You\'re All Set! 🎉';
-    const assetsBaseUrl = this.configService.get('postmark.assetsBaseUrl') || 
-                         this.configService.get('aws.r2.publicUrl') || 
-                         'https://storage.buykoins.com';
-    
+    const subject = 'Your account is verified – You can now request payouts';
+    const assetsBaseUrl = this.configService.get('postmark.assetsBaseUrl') ||
+      this.configService.get('aws.r2.publicUrl') ||
+      'https://storage.buykoins.com';
     const htmlBody = WelcomeEmailTemplate.getHtml(firstName, assetsBaseUrl);
     const textBody = WelcomeEmailTemplate.getText(firstName);
-
     await this.sendEmail(email, subject, htmlBody, textBody);
   }
 

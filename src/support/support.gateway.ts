@@ -11,6 +11,8 @@ import { Server, Socket } from 'socket.io';
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { SupportService } from './support.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { GuestIdUtil } from './utils/guest-id.util';
 import { SenderType, MessageType } from './entities/support-message.entity';
 
@@ -42,6 +44,8 @@ export class SupportGateway implements OnGatewayConnection, OnGatewayDisconnect 
   constructor(
     private jwtService: JwtService,
     private supportService: SupportService,
+    private notificationsService: NotificationsService,
+    private notificationsGateway: NotificationsGateway,
   ) {}
 
   /**
@@ -323,6 +327,24 @@ export class SupportGateway implements OnGatewayConnection, OnGatewayDisconnect 
           conversationId: payload.conversationId,
           message: messagePayload,
         });
+        // First user/guest message in conversation: persist admin notification and push
+        if (result.isFirstUserOrGuestMessage) {
+          try {
+            const adminIds = await this.notificationsService.getActiveAdminIds();
+            if (adminIds.length > 0) {
+              const notifications = await this.notificationsService.notifyAdminNewSupportMessage(
+                adminIds,
+                payload.conversationId,
+                senderId || undefined,
+              );
+              if (notifications.length > 0) {
+                await this.notificationsGateway.sendToAllAdmins(notifications[0]);
+              }
+            }
+          } catch (err) {
+            this.logger.warn('Failed to send admin new support message notification', err);
+          }
+        }
       }
 
       // Broadcast unread count update

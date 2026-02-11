@@ -260,6 +260,7 @@ export class SupportService {
     conversationId: string;
     unreadCount: number;
     receiverType: 'admin' | 'user' | 'guest';
+    isFirstUserOrGuestMessage: boolean;
   }> {
     const conversation = await SupportConversation.findByPk(data.conversationId);
     if (!conversation) {
@@ -357,11 +358,30 @@ export class SupportService {
     // Calculate updated unread count for receiver
     const unreadCount = await this.calculateUnreadCount(data.conversationId, receiverType);
 
+    // First user/guest message in this conversation? (for admin notification)
+    let isFirstUserOrGuestMessage = false;
+    if (data.senderType === SenderType.USER || data.senderType === SenderType.GUEST) {
+      const countResult = await this.sequelize.query(
+        `SELECT COUNT(*) as count FROM support_messages
+         WHERE conversation_id = :conversationId AND sender_type IN (:senderTypes)`,
+        {
+          replacements: {
+            conversationId: data.conversationId,
+            senderTypes: [SenderType.USER, SenderType.GUEST],
+          },
+          type: QueryTypes.SELECT,
+        },
+      ) as Array<{ count: string | number }>;
+      const count = parseInt(String(countResult[0]?.count ?? 0), 10);
+      isFirstUserOrGuestMessage = count === 1;
+    }
+
     return {
       message,
       conversationId: data.conversationId,
       unreadCount,
       receiverType,
+      isFirstUserOrGuestMessage,
     };
   }
 

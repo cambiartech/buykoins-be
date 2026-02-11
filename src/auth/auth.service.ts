@@ -110,19 +110,19 @@ export class AuthService {
     // Reload to get the saved values
     await user.reload();
 
-    // Send verification email (or console log for development)
+    // Send verification email (OTP)
     try {
       await this.emailService.sendVerificationCode(email, verificationCode);
     } catch (error) {
       console.error('Failed to send verification email:', error);
-      // Console log the code for development
-      console.log('\n📧 ============================================');
-      console.log('📧 VERIFICATION CODE (Development Mode)');
-      console.log('📧 ============================================');
-      console.log(`📧 Email: ${email}`);
-      console.log(`📧 Verification Code: ${verificationCode}`);
-      console.log(`📧 Expires at: ${verificationCodeExpiresAt.toISOString()}`);
-      console.log('📧 ============================================\n');
+      console.log('\n📧 VERIFICATION CODE (dev):', verificationCode);
+    }
+
+    // Send welcome-after-signup email (onboarding and card pitch)
+    try {
+      await this.emailService.sendWelcomeAfterSignup(email, firstName);
+    } catch (error) {
+      console.error('Failed to send welcome-after-signup email:', error);
     }
 
     return {

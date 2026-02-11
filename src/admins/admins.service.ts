@@ -641,15 +641,14 @@ export class AdminsService {
 
       await transaction.commit();
 
-      // Send welcome email after successful onboarding
+      // Send onboarding complete email (account verified)
       try {
-        await this.emailService.sendWelcomeEmail(
+        await this.emailService.sendOnboardingCompleteEmail(
           user.email,
-          user.firstName || 'there', // Fallback if firstName is not set
+          user.firstName || undefined,
         );
       } catch (emailError) {
-        // Log error but don't fail the onboarding process
-        console.error('Failed to send welcome email:', emailError);
+        console.error('Failed to send onboarding complete email:', emailError);
       }
 
       // Send notification

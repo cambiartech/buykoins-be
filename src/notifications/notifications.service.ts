@@ -1,6 +1,9 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { Notification, NotificationType, NotificationPriority } from './entities/notification.entity';
+import { Admin, AdminStatus } from '../admins/entities/admin.entity';
+import { User, UserStatus, OnboardingStatus } from '../users/entities/user.entity';
 import { Op } from 'sequelize';
+import type { BroadcastAudience } from './dto/broadcast-announcement.dto';
 
 export interface CreateNotificationDto {
   userId?: string;
@@ -379,5 +382,124 @@ export class NotificationsService {
     );
 
     return await Promise.all(notifications);
+  }
+
+  /**
+   * Notify user: Card funded
+   */
+  async notifyCardFunded(userId: string, amount: number, cardLast4: string) {
+    return await this.create({
+      userId,
+      type: NotificationType.CARD_FUNDED,
+      title: 'Card funded',
+      message: `Your card ending ${cardLast4} has been funded with ${amount} NGN. It is available for TikTok coins and other digital purchases.`,
+      metadata: { amount, cardLast4 },
+      priority: NotificationPriority.MEDIUM,
+      actionUrl: `/dashboard/cards`,
+    });
+  }
+
+  /**
+   * Notify user: Wallet credited
+   */
+  async notifyWalletCredited(userId: string, amount: number) {
+    return await this.create({
+      userId,
+      type: NotificationType.WALLET_CREDITED,
+      title: 'Wallet credited',
+      message: `Your wallet has been credited with ${amount} NGN. You can fund your card or use it for digital purchases.`,
+      metadata: { amount },
+      priority: NotificationPriority.MEDIUM,
+      actionUrl: `/dashboard`,
+    });
+  }
+
+  /**
+   * Notify admin: First support message in conversation (user/guest started)
+   */
+  async notifyAdminNewSupportMessage(adminIds: string[], conversationId: string, userId?: string) {
+    const notifications = adminIds.map((adminId) =>
+      this.create({
+        adminId,
+        type: NotificationType.NEW_SUPPORT_MESSAGE,
+        title: 'New support conversation',
+        message: 'A user has started a support conversation. Reply from the Support inbox.',
+        metadata: { conversationId, userId },
+        priority: NotificationPriority.MEDIUM,
+        actionUrl: `/admin/support`,
+      }),
+    );
+    return await Promise.all(notifications);
+  }
+
+  /**
+   * Create announcement (email blast) for one user. Call for each user when broadcasting.
+   * Use metadata.messageFormat = 'html' when message is HTML (e.g. from rich text editor).
+   */
+  async notifyAnnouncement(userId: string, title: string, message: string, metadata?: Record<string, unknown>) {
+    return await this.create({
+      userId,
+      type: NotificationType.ANNOUNCEMENT,
+      title,
+      message,
+      metadata: metadata || {},
+      priority: NotificationPriority.MEDIUM,
+      actionUrl: `/dashboard`,
+    });
+  }
+
+  /**
+   * Get user IDs for broadcast: by explicit list or by audience filter.
+   */
+  async getBroadcastUserIds(options: { userIds?: string[]; audience?: BroadcastAudience }): Promise<string[]> {
+    const { userIds, audience = 'all' } = options;
+    if (userIds && userIds.length > 0) {
+      const found = await User.findAll({
+        where: { id: { [Op.in]: userIds } },
+        attributes: ['id'],
+      });
+      return found.map((u) => u.id);
+    }
+    const where: Record<string, unknown> = {};
+    if (audience === 'active') {
+      where.status = UserStatus.ACTIVE;
+    } else if (audience === 'onboarded') {
+      where.onboardingStatus = OnboardingStatus.COMPLETED;
+    }
+    const users = await User.findAll({ where, attributes: ['id'] });
+    return users.map((u) => u.id);
+  }
+
+  /**
+   * Get active admin IDs (for broadcasting admin notifications).
+   */
+  async getActiveAdminIds(): Promise<string[]> {
+    const admins = await Admin.findAll({
+      where: { status: AdminStatus.ACTIVE },
+      attributes: ['id'],
+    });
+    return admins.map((a) => a.id);
+  }
+
+  /**
+   * Broadcast announcement (email blast). Targets users by userIds or audience. Returns list of { userId, notification } for pushing via gateway.
+   * messageFormat is stored in notification metadata so clients can render plain vs HTML accordingly.
+   */
+  async broadcastAnnouncement(options: {
+    title: string;
+    message: string;
+    messageFormat?: 'plain' | 'html';
+    userIds?: string[];
+    audience?: BroadcastAudience;
+  }): Promise<Array<{ userId: string; notification: Notification }>> {
+    const { title, message, messageFormat = 'plain', userIds, audience = 'all' } = options;
+    const userIdList = await this.getBroadcastUserIds({ userIds, audience });
+    const results: Array<{ userId: string; notification: Notification }> = [];
+    const metadata = messageFormat === 'html' ? { messageFormat: 'html' } : undefined;
+    for (const uid of userIdList) {
+      const notification = await this.notifyAnnouncement(uid, title, message, metadata);
+      results.push({ userId: uid, notification: notification as Notification });
+    }
+    return results;
   }
 }

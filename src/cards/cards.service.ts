@@ -18,6 +18,8 @@ import { CreateCardDto as CreateCardRequestDto } from './dto/create-card.dto';
 import { FundCardDto } from './dto/fund-card.dto';
 import { UpdateCardDto } from './dto/update-card.dto';
 import { SaveOnboardingStepDto } from './dto/save-onboarding-step.dto';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @Injectable()
 export class CardsService {
@@ -26,6 +28,8 @@ export class CardsService {
     @Inject('SEQUELIZE') private sequelize: Sequelize,
     private sudoApiService: SudoApiService,
     private configService: ConfigService,
+    private notificationsService: NotificationsService,
+    private notificationsGateway: NotificationsGateway,
   ) {}
 
   /**
@@ -487,6 +491,14 @@ export class CardsService {
       );
 
       await transaction.commit();
+
+      try {
+        const last4 = card.cardNumber?.slice(-4) || '****';
+        const notification = await this.notificationsService.notifyCardFunded(userId, fundCardDto.amount, last4);
+        await this.notificationsGateway.sendToUser(userId, notification);
+      } catch (notifError) {
+        this.logger.warn('Failed to send card funded notification:', notifError);
+      }
 
       return {
         card,

@@ -16,6 +16,8 @@ import { PaymentTransaction, PaymentStatus } from './entities/payment-transactio
 import { InitializePaymentDto } from './dto/initialize-payment.dto';
 import { TransferEarningsToWalletDto } from './dto/transfer-earnings-to-wallet.dto';
 import { v4 as uuidv4 } from 'uuid';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @Injectable()
 export class PaymentsService {
@@ -25,6 +27,8 @@ export class PaymentsService {
     @Inject('SEQUELIZE') private sequelize: Sequelize,
     private paystackApiService: PaystackApiService,
     private configService: ConfigService,
+    private notificationsService: NotificationsService,
+    private notificationsGateway: NotificationsGateway,
   ) {}
 
   /**
@@ -155,6 +159,13 @@ export class PaymentsService {
         `Payment ${reference} verified and wallet credited: ${amountInNgn} NGN`,
       );
 
+      try {
+        const notification = await this.notificationsService.notifyWalletCredited(user.id, amountInNgn);
+        await this.notificationsGateway.sendToUser(user.id, notification);
+      } catch (notifError) {
+        this.logger.warn('Failed to send wallet credited notification:', notifError);
+      }
+
       return paymentTransaction;
     } catch (error) {
       await dbTransaction.rollback();
@@ -210,6 +221,13 @@ export class PaymentsService {
       this.logger.log(
         `User ${userId} transferred ${dto.amount} NGN from earnings to wallet`,
       );
+
+      try {
+        const notification = await this.notificationsService.notifyWalletCredited(userId, dto.amount);
+        await this.notificationsGateway.sendToUser(userId, notification);
+      } catch (notifError) {
+        this.logger.warn('Failed to send wallet credited notification:', notifError);
+      }
 
       return {
         success: true,

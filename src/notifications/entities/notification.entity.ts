@@ -19,7 +19,10 @@ export enum NotificationType {
   PAYOUT_REJECTED = 'payout_rejected',
   ONBOARDING_COMPLETED = 'onboarding_completed',
   ACCOUNT_SUSPENDED = 'account_suspended',
-  
+  CARD_FUNDED = 'card_funded',
+  WALLET_CREDITED = 'wallet_credited',
+  ANNOUNCEMENT = 'announcement',
+
   // Admin notifications
   NEW_CREDIT_REQUEST = 'new_credit_request',
   NEW_PAYOUT_REQUEST = 'new_payout_request',
