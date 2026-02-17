@@ -183,8 +183,11 @@ export class TikTokAuthService {
     });
 
     const json = await res.json().catch(() => ({}));
-    if (!res.ok || json.error?.code) {
-      const msg = json.error?.message || json.error?.code || res.statusText || 'Failed to get TikTok profile';
+    // TikTok returns error: { code: "ok", message: "" } on success; only treat as error when code is not "ok"
+    const tiktokError = json.error;
+    const isError = !res.ok || (tiktokError && tiktokError.code && tiktokError.code !== 'ok');
+    if (isError) {
+      const msg = tiktokError?.message || tiktokError?.code || res.statusText || 'Failed to get TikTok profile';
       throw new BadRequestException(`TikTok profile failed: ${msg}`);
     }
 

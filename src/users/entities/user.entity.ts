@@ -156,6 +156,14 @@ export class User extends Model<User> {
   declare joinedAt: Date;
 
   @Column({
+    type: DataType.STRING(20),
+    allowNull: true,
+    defaultValue: 'email',
+    field: 'auth_type',
+  })
+  declare authType: string;
+
+  @Column({
     type: DataType.STRING(64),
     allowNull: true,
     unique: true,

@@ -70,6 +70,7 @@ const KNOWN_ORDER = [
   'fix-support-timestamps-timezone.sql',
   'add-notifications-related-user-id.sql',
   'add-tiktok-fields-to-users.sql',
+  'add-auth-type-to-users.sql',
 ];
 
 const MIGRATIONS_TABLE = `

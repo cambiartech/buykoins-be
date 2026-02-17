@@ -67,6 +67,7 @@ export class AuthService {
       password: hashedPassword,
       username,
       balance: 0,
+      authType: 'email',
     };
     
     if (phone) {
@@ -497,6 +498,7 @@ export class AuthService {
           emailVerified: true,
           status: UserStatus.ACTIVE,
           onboardingStatus: OnboardingStatus.PENDING,
+          authType: 'tiktok',
           tiktokOpenId: openId,
           tiktokDisplayName: displayName ?? null,
           tiktokAvatarUrl: avatarUrl ?? null,

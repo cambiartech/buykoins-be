@@ -244,6 +244,10 @@ export class UsersService {
       joinedAt: user.joinedAt,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
+      authType: user.authType ?? 'email',
+      tiktokDisplayName: user.tiktokDisplayName ?? null,
+      tiktokAvatarUrl: user.tiktokAvatarUrl ?? null,
+      hasTikTok: !!user.tiktokOpenId,
     };
   }
 
@@ -285,6 +289,10 @@ export class UsersService {
       walletStatus: user.walletStatus,
       joinedAt: user.joinedAt,
       updatedAt: user.updatedAt,
+      authType: user.authType ?? 'email',
+      tiktokDisplayName: user.tiktokDisplayName ?? null,
+      tiktokAvatarUrl: user.tiktokAvatarUrl ?? null,
+      hasTikTok: !!user.tiktokOpenId,
     };
   }
 
