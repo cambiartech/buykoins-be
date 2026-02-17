@@ -156,6 +156,28 @@ export class User extends Model<User> {
   declare joinedAt: Date;
 
   @Column({
+    type: DataType.STRING(64),
+    allowNull: true,
+    unique: true,
+    field: 'tiktok_open_id',
+  })
+  declare tiktokOpenId: string;
+
+  @Column({
+    type: DataType.STRING(255),
+    allowNull: true,
+    field: 'tiktok_display_name',
+  })
+  declare tiktokDisplayName: string;
+
+  @Column({
+    type: DataType.TEXT,
+    allowNull: true,
+    field: 'tiktok_avatar_url',
+  })
+  declare tiktokAvatarUrl: string;
+
+  @Column({
     type: DataType.JSONB,
     allowNull: true,
     field: 'sudo_customer_onboarding_data',

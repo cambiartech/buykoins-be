@@ -211,5 +211,63 @@ export class EmailService {
 
     await this.sendEmail(email, subject, htmlBody, textBody);
   }
+
+  /**
+   * Send email to admin when a user submits an onboarding request.
+   * Recipient: app.adminEmail (e.g. operations@buykoins.com from ADMIN_EMAIL env).
+   */
+  async sendAdminOnboardingRequestAlert(
+    userId: string,
+    onboardingRequestId: string,
+    userEmail?: string,
+    userName?: string,
+  ): Promise<void> {
+    const to = this.configService.get<string>('app.adminEmail');
+    if (!to) return;
+    const subject = 'New onboarding request – Buykoins';
+    const userInfo = userEmail ? (userName ? `${userName} (${userEmail})` : userEmail) : `User ID: ${userId}`;
+    const htmlBody = `
+      <p>A user has submitted an onboarding request and is awaiting verification.</p>
+      <p><strong>User:</strong> ${userInfo}</p>
+      <p><strong>User ID:</strong> ${userId}</p>
+      <p><strong>Onboarding request ID:</strong> ${onboardingRequestId}</p>
+      <p>Review and process the request from your admin dashboard.</p>
+    `;
+    const textBody = `New onboarding request. User: ${userInfo}. User ID: ${userId}. Onboarding request ID: ${onboardingRequestId}. Review from your admin dashboard.`;
+    try {
+      await this.sendEmail(to, subject, htmlBody, textBody);
+    } catch (err) {
+      console.error('Failed to send admin onboarding request email:', err);
+    }
+  }
+
+  /**
+   * Send email to admin when a user or guest starts a support conversation (first message).
+   * Recipient: app.adminEmail (e.g. operations@buykoins.com from ADMIN_EMAIL env).
+   */
+  async sendAdminNewSupportConversationAlert(
+    conversationId: string,
+    userId?: string,
+    userEmail?: string,
+  ): Promise<void> {
+    const to = this.configService.get<string>('app.adminEmail');
+    if (!to) return;
+    const subject = 'New support conversation – Buykoins';
+    const userInfo = userId
+      ? (userEmail ? `User ${userEmail} (${userId})` : `User ID: ${userId}`)
+      : 'Guest';
+    const htmlBody = `
+      <p>A user has started a support conversation. Reply from the Support inbox.</p>
+      <p><strong>From:</strong> ${userInfo}</p>
+      <p><strong>Conversation ID:</strong> ${conversationId}</p>
+      <p>Open your admin dashboard to respond.</p>
+    `;
+    const textBody = `New support conversation from ${userInfo}. Conversation ID: ${conversationId}. Reply from your admin dashboard.`;
+    try {
+      await this.sendEmail(to, subject, htmlBody, textBody);
+    } catch (err) {
+      console.error('Failed to send admin new support conversation email:', err);
+    }
+  }
 }
 

@@ -759,7 +759,7 @@ export class AdminsController {
     status: 201,
     description: 'Admin created successfully',
   })
-  @ApiResponse({ status: 400, description: 'Email already exists' })
+  @ApiResponse({ status: 400, description: 'Email already exists, login instead!' })
   @Roles('super_admin')
   async createAdmin(
     @Body() createDto: CreateAdminDto,

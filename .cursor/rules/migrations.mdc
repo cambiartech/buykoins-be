@@ -1,0 +1,13 @@
+---
+description: Database migrations live in database/migrations and how to run them
+globs: database/migrations/**/*.sql, scripts/run-migrations.js
+alwaysApply: false
+---
+
+# Database migrations
+
+- **Location**: All SQL migrations live under `database/migrations/`. Add new migrations there; do not create tables elsewhere.
+- **Naming**: Use descriptive names, e.g. `add-notifications-related-user-id.sql`, `create-notifications-table.sql`.
+- **Order**: Add new migration filenames to `KNOWN_ORDER` in `scripts/run-migrations.js` so they run in the correct dependency order.
+- **Idempotency**: Prefer `CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS` so re-runs are safe.
+- **Running locally**: With local Postgres (e.g. `DB_HOST=localhost`, `DB_PORT=5432`, `DB_USERNAME=postgres`, `DB_NAME=buytiktokcoins`, no password): run `npm run db:migrate` or `DB_HOST=localhost DB_PORT=5432 DB_USERNAME=postgres DB_NAME=buytiktokcoins node scripts/run-migrations.js`. SSL is disabled automatically for localhost.

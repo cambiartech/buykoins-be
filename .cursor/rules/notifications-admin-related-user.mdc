@@ -1,0 +1,28 @@
+---
+description: Admin notifications must record which user triggered them (related_user_id)
+globs: src/notifications/**/*.ts, src/support/**/*.ts
+alwaysApply: false
+---
+
+# Admin notifications and related user
+
+When a notification is **for an admin** but **about a user** (e.g. "a user sent a support message"), admins must be able to see who that user is.
+
+- **Schema**: The `notifications` table has `related_user_id` (nullable, FK to `users.id`). Use it for admin notifications triggered by a user (e.g. new support message, new onboarding request).
+- **Entity**: `Notification` has `relatedUserId`; include it in `CreateNotificationDto` and in `formatNotification()` so API/WebSocket responses expose it.
+- **Example**: For "new support message", set `relatedUserId: userId` when creating the notification so the admin UI can show "From: User X" or link to the user.
+
+```typescript
+// ✅ GOOD: admin notification about a user
+this.create({
+  adminId,
+  relatedUserId: userId,
+  type: NotificationType.NEW_SUPPORT_MESSAGE,
+  title: 'New support conversation',
+  message: '...',
+  metadata: { conversationId, userId },
+  ...
+});
+```
+
+Do not leave `related_user_id` empty when the notification is clearly about a specific user; otherwise admins cannot identify who sent the message or triggered the event.

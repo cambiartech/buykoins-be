@@ -11,9 +11,9 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
 
-  // API Prefix
+  // API Prefix (exclude TikTok OAuth callback so portal Redirect URI https://core.buykoins.com/callback-tiktok works)
   const apiPrefix = configService.get<string>('app.apiPrefix', 'api');
-  app.setGlobalPrefix(apiPrefix);
+  app.setGlobalPrefix(apiPrefix, { exclude: ['callback-tiktok'] });
 
   // CORS: allow single origin or comma-separated list (e.g. for Vercel + localhost)
   const corsOrigin = configService.get<string>('app.corsOrigin') ?? 'http://localhost:3000';

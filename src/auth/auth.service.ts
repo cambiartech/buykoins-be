@@ -110,19 +110,12 @@ export class AuthService {
     // Reload to get the saved values
     await user.reload();
 
-    // Send verification email (OTP)
+    // Send verification email (OTP) only. Welcome email is sent after OTP is verified (see verifyEmail).
     try {
       await this.emailService.sendVerificationCode(email, verificationCode);
     } catch (error) {
       console.error('Failed to send verification email:', error);
       console.log('\n📧 VERIFICATION CODE (dev):', verificationCode);
-    }
-
-    // Send welcome-after-signup email (onboarding and card pitch)
-    try {
-      await this.emailService.sendWelcomeAfterSignup(email, firstName);
-    } catch (error) {
-      console.error('Failed to send welcome-after-signup email:', error);
     }
 
     return {
@@ -225,6 +218,13 @@ export class AuthService {
     (user as any).verificationCode = null;
     (user as any).verificationCodeExpiresAt = null;
     await user.save();
+
+    // Send welcome email only after email is verified (not at signup).
+    try {
+      await this.emailService.sendWelcomeAfterSignup(user.email, user.firstName);
+    } catch (error) {
+      console.error('Failed to send welcome-after-verification email:', error);
+    }
 
     // Generate tokens
     const tokens = await this.generateTokens(user.id, user.email, 'user');
@@ -430,6 +430,81 @@ export class AuthService {
     throw new BadRequestException(
       `Social login with ${provider} is not yet implemented`,
     );
+  }
+
+  /**
+   * Link TikTok identity to an existing user (after TikTok OAuth callback).
+   * Fails if this TikTok account is already linked to another user.
+   */
+  async linkTikTokToUser(
+    userId: string,
+    openId: string,
+    displayName?: string,
+    avatarUrl?: string,
+  ): Promise<void> {
+    const user = await User.findByPk(userId);
+    if (!user) throw new NotFoundException('User not found');
+
+    const existing = await User.findOne({ where: { tiktokOpenId: openId } });
+    if (existing && existing.id !== userId) {
+      throw new ConflictException('This TikTok account is already linked to another user.');
+    }
+
+    await user.update({
+      tiktokOpenId: openId,
+      tiktokDisplayName: displayName ?? null,
+      tiktokAvatarUrl: avatarUrl ?? null,
+    } as any);
+  }
+
+  /**
+   * Sign in or sign up with TikTok (no existing JWT). Find user by tiktok_open_id or create one.
+   * Returns user and tokens for session. Used by OAuth callback when state has no sub.
+   */
+  async findOrCreateUserByTikTok(
+    openId: string,
+    displayName?: string,
+    avatarUrl?: string,
+  ): Promise<{ user: User; token: string; refreshToken: string }> {
+    let user = await User.findOne({ where: { tiktokOpenId: openId } });
+    if (user) {
+      if (user.status !== UserStatus.ACTIVE) {
+        throw new UnauthorizedException('Account is not active');
+      }
+      await user.update({
+        tiktokDisplayName: displayName ?? user.tiktokDisplayName,
+        tiktokAvatarUrl: avatarUrl ?? user.tiktokAvatarUrl,
+      } as any);
+    } else {
+      const emailLocal = `tiktok_${openId.replace(/[^a-zA-Z0-9._-]/g, '')}`.slice(0, 64);
+      const email = `${emailLocal}@users.buykoins.com`;
+      const existingEmail = await User.findOne({ where: { email } });
+      if (existingEmail) {
+        await existingEmail.update({
+          tiktokOpenId: openId,
+          tiktokDisplayName: displayName ?? null,
+          tiktokAvatarUrl: avatarUrl ?? null,
+        } as any);
+        user = existingEmail;
+      } else {
+        const username = UsernameGenerator.generate(displayName || undefined, undefined, email);
+        const hashedPassword = await PasswordUtil.hash(PasswordUtil.generateRandom());
+        user = await User.create({
+          email,
+          password: hashedPassword,
+          username,
+          firstName: displayName || null,
+          emailVerified: true,
+          status: UserStatus.ACTIVE,
+          onboardingStatus: OnboardingStatus.PENDING,
+          tiktokOpenId: openId,
+          tiktokDisplayName: displayName ?? null,
+          tiktokAvatarUrl: avatarUrl ?? null,
+        } as any);
+      }
+    }
+    const tokens = await this.generateTokens(user.id, user.email, 'user');
+    return { user, ...tokens };
   }
 
   /**

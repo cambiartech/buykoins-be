@@ -28,13 +28,14 @@ import appConfig from './config/app.config';
 import sudoConfig from './config/sudo.config';
 import paystackConfig from './config/paystack.config';
 import postmarkConfig from './config/postmark.config';
+import tiktokConfig from './config/tiktok.config';
 
 @Module({
   imports: [
     // Configuration Module
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [databaseConfig, jwtConfig, awsConfig, appConfig, sudoConfig, paystackConfig, postmarkConfig],
+      load: [databaseConfig, jwtConfig, awsConfig, appConfig, sudoConfig, paystackConfig, postmarkConfig, tiktokConfig],
       envFilePath: ['.env.local', '.env'],
     }),
     // Rate Limiting

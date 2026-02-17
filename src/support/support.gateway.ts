@@ -13,6 +13,7 @@ import { JwtService } from '@nestjs/jwt';
 import { SupportService } from './support.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
+import { EmailService } from '../email/email.service';
 import { GuestIdUtil } from './utils/guest-id.util';
 import { SenderType, MessageType } from './entities/support-message.entity';
 
@@ -46,6 +47,7 @@ export class SupportGateway implements OnGatewayConnection, OnGatewayDisconnect 
     private supportService: SupportService,
     private notificationsService: NotificationsService,
     private notificationsGateway: NotificationsGateway,
+    private emailService: EmailService,
   ) {}
 
   /**
@@ -327,7 +329,7 @@ export class SupportGateway implements OnGatewayConnection, OnGatewayDisconnect 
           conversationId: payload.conversationId,
           message: messagePayload,
         });
-        // First user/guest message in conversation: persist admin notification and push
+        // First user/guest message in conversation: persist admin notification, push, and email admin
         if (result.isFirstUserOrGuestMessage) {
           try {
             const adminIds = await this.notificationsService.getActiveAdminIds();
@@ -341,6 +343,11 @@ export class SupportGateway implements OnGatewayConnection, OnGatewayDisconnect 
                 await this.notificationsGateway.sendToAllAdmins(notifications[0]);
               }
             }
+            // Email admin (e.g. operations@buykoins.com) so they see it even when not in dashboard
+            await this.emailService.sendAdminNewSupportConversationAlert(
+              payload.conversationId,
+              senderId || undefined,
+            );
           } catch (err) {
             this.logger.warn('Failed to send admin new support message notification', err);
           }

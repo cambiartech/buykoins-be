@@ -10,8 +10,13 @@ const { Client } = require('pg');
 
 function getConfig() {
   const databaseUrl = process.env.DATABASE_URL && process.env.DATABASE_URL.trim();
+  const isLocal = (urlOrHost) => {
+    const s = (urlOrHost || '').toString();
+    return s.includes('localhost') || s === '127.0.0.1';
+  };
   if (databaseUrl) {
-    return { connectionString: databaseUrl, ssl: { rejectUnauthorized: false } };
+    const ssl = isLocal(databaseUrl) ? false : { rejectUnauthorized: false };
+    return { connectionString: databaseUrl, ssl };
   }
   // On Railway we only use DATABASE_URL (never PostgreSQLEndpoint/DB_HOST — remove those in Variables)
   if (process.env.RAILWAY_ENVIRONMENT) {
@@ -21,22 +26,26 @@ function getConfig() {
     );
     process.exit(1);
   }
-  const host = process.env.PostgreSQLEndpoint || process.env.DB_HOST;
+  const host = (process.env.PostgreSQLEndpoint || process.env.DB_HOST || '').trim();
   const port = parseInt(process.env.DB_PORT || process.env.PostgresPort || '5432', 10);
   const user = process.env.DB_USERNAME || process.env.PostgresUser || 'postgres';
   const password = process.env.PostgresPassword || process.env.DB_PASSWORD;
   const database = process.env.DB_NAME || process.env.PostgresDatabase || 'buytiktokcoins';
-  if (!host || !password) {
-    console.error('Set DATABASE_URL or (PostgreSQLEndpoint or DB_HOST) and (PostgresPassword or DB_PASSWORD).');
+  if (!host) {
+    console.error('Set DATABASE_URL or (PostgreSQLEndpoint or DB_HOST).');
+    process.exit(1);
+  }
+  if (!isLocal(host) && (password === undefined || password === null)) {
+    console.error('PostgresPassword or DB_PASSWORD required for non-local host.');
     process.exit(1);
   }
   return {
-    host: host.trim(),
+    host,
     port,
     user,
-    password,
+    password: password || undefined,
     database,
-    ssl: { rejectUnauthorized: false },
+    ssl: isLocal(host) ? false : { rejectUnauthorized: false },
   };
 }
 
@@ -59,6 +68,8 @@ const KNOWN_ORDER = [
   'add-last-activity-to-widget-sessions.sql',
   'add-bvn-nin-onboarding-requirements.sql',
   'fix-support-timestamps-timezone.sql',
+  'add-notifications-related-user-id.sql',
+  'add-tiktok-fields-to-users.sql',
 ];
 
 const MIGRATIONS_TABLE = `

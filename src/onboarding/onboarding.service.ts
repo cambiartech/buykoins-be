@@ -14,6 +14,7 @@ import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { Admin } from '../admins/entities/admin.entity';
 import { SettingsService } from '../settings/settings.service';
 import { BusinessRulesSettings } from '../settings/interfaces/settings.interface';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class OnboardingService {
@@ -22,6 +23,7 @@ export class OnboardingService {
     private notificationsService: NotificationsService,
     private notificationsGateway: NotificationsGateway,
     private settingsService: SettingsService,
+    private emailService: EmailService,
   ) {}
 
   /**
@@ -36,6 +38,12 @@ export class OnboardingService {
 
     if (user.onboardingStatus === OnboardingStatus.COMPLETED) {
       throw new ConflictException('You have already completed onboarding');
+    }
+
+    if (!user.tiktokOpenId) {
+      throw new BadRequestException(
+        'You must link your TikTok account before requesting onboarding. Use "Add TikTok Account" in your profile or onboarding flow.',
+      );
     }
 
     // Get business rules settings
@@ -69,6 +77,30 @@ export class OnboardingService {
     });
 
     if (existingPendingRequest) {
+      // Still notify admin (in-app + email) so they are aware and can go process the pending request
+      try {
+        const admins = await Admin.findAll({
+          where: { status: 'active' },
+          attributes: ['id'],
+        });
+        const adminIds = admins.map((a) => a.id);
+        const notifications = await this.notificationsService.notifyAdminNewOnboardingRequest(
+          adminIds,
+          userId,
+          existingPendingRequest.id,
+        );
+        if (notifications?.length > 0) {
+          await this.notificationsGateway.sendToAllAdmins(notifications[0]);
+        }
+        await this.emailService.sendAdminOnboardingRequestAlert(
+          userId,
+          existingPendingRequest.id,
+          user.email,
+          user.firstName,
+        );
+      } catch (notifError) {
+        console.error('Failed to send admin notifications (pending request):', notifError);
+      }
       throw new ConflictException(
         'You already have a pending onboarding request. Please wait for it to be processed.',
       );
@@ -100,6 +132,14 @@ export class OnboardingService {
       if (notifications && notifications.length > 0) {
         await this.notificationsGateway.sendToAllAdmins(notifications[0]);
       }
+
+      // Email admin (e.g. operations@buykoins.com) so they see it even when not in dashboard
+      await this.emailService.sendAdminOnboardingRequestAlert(
+        userId,
+        onboardingRequest.id,
+        user.email,
+        user.firstName,
+      );
     } catch (notifError) {
       console.error('Failed to send admin notifications:', notifError);
     }

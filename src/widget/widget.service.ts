@@ -377,24 +377,27 @@ export class WidgetService {
   }
 
   /**
-   * Notify admin to provide PayPal credentials
+   * Notify admin to provide PayPal credentials.
+   * Creates an onboarding request (or re-notifies for existing pending); admin gets in-app + email either way.
    */
   private async notifyAdminForCredentials(userId: string, sessionId: string): Promise<void> {
     try {
-      // Get or create support conversation for onboarding
       const user = await User.findByPk(userId);
       if (!user) return;
 
-      // Create onboarding request if it doesn't exist
       await this.onboardingService.createOnboardingRequest(userId, {
         message: 'User requested PayPal credentials via widget',
       });
 
-      // Create support conversation for admin notification
-      // This will be handled by the support system
       this.logger.log(`Admin notification sent for credentials request: user ${userId}, session ${sessionId}`);
-    } catch (error) {
-      this.logger.error(`Failed to notify admin for credentials: ${error.message}`);
+    } catch (error: any) {
+      // When user already has a pending request, onboarding service still notifies admin (in-app + email) then throws
+      const isPendingConflict = error?.message?.includes?.('pending onboarding request');
+      if (isPendingConflict) {
+        this.logger.log(`Credentials request: user ${userId} already has pending request; admin was notified.`);
+      } else {
+        this.logger.error(`Failed to notify admin for credentials: ${error?.message}`);
+      }
       // Don't throw - allow flow to continue
     }
   }

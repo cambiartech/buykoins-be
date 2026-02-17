@@ -74,6 +74,18 @@ export class Notification extends Model<Notification> {
   @BelongsTo(() => Admin, { foreignKey: 'admin_id' })
   admin: Admin;
 
+  /** For admin notifications: the user who triggered this (e.g. who sent the support message). */
+  @ForeignKey(() => User)
+  @Column({
+    type: DataType.UUID,
+    allowNull: true,
+    field: 'related_user_id',
+  })
+  declare relatedUserId: string;
+
+  @BelongsTo(() => User, { foreignKey: 'related_user_id' })
+  relatedUser: User;
+
   @Column({
     type: DataType.ENUM(...Object.values(NotificationType)),
     allowNull: false,

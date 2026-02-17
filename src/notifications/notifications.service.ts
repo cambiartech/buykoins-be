@@ -8,6 +8,8 @@ import type { BroadcastAudience } from './dto/broadcast-announcement.dto';
 export interface CreateNotificationDto {
   userId?: string;
   adminId?: string;
+  /** For admin notifications: the user who triggered this (e.g. who sent the support message). */
+  relatedUserId?: string;
   type: NotificationType;
   title: string;
   message: string;
@@ -25,6 +27,7 @@ export class NotificationsService {
     const notification = await Notification.create({
       userId: dto.userId,
       adminId: dto.adminId,
+      relatedUserId: dto.relatedUserId,
       type: dto.type,
       title: dto.title,
       message: dto.message,
@@ -234,6 +237,7 @@ export class NotificationsService {
       title: notification.title,
       message: notification.message,
       metadata: notification.metadata,
+      relatedUserId: notification.relatedUserId,
       priority: notification.priority,
       isRead: notification.isRead,
       readAt: notification.readAt,
@@ -323,6 +327,7 @@ export class NotificationsService {
     const notifications = adminIds.map((adminId) =>
       this.create({
         adminId,
+        relatedUserId: userId,
         type: NotificationType.NEW_CREDIT_REQUEST,
         title: 'New Credit Request',
         message: `New credit request of $${amount.toFixed(2)} from user`,
@@ -346,6 +351,7 @@ export class NotificationsService {
     const notifications = adminIds.map((adminId) =>
       this.create({
         adminId,
+        relatedUserId: userId,
         type: NotificationType.NEW_PAYOUT_REQUEST,
         title: 'New Payout Request',
         message: `New payout request of $${amount.toFixed(2)} from user`,
@@ -369,6 +375,7 @@ export class NotificationsService {
     const notifications = adminIds.map((adminId) =>
       this.create({
         adminId,
+        relatedUserId: userId,
         type: NotificationType.NEW_ONBOARDING_REQUEST,
         title: 'New Onboarding Request',
         message: 'A new user has submitted an onboarding request',
@@ -421,6 +428,7 @@ export class NotificationsService {
     const notifications = adminIds.map((adminId) =>
       this.create({
         adminId,
+        relatedUserId: userId,
         type: NotificationType.NEW_SUPPORT_MESSAGE,
         title: 'New support conversation',
         message: 'A user has started a support conversation. Reply from the Support inbox.',
