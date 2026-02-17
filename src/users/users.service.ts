@@ -4,7 +4,7 @@ import { User, OnboardingStatus } from './entities/user.entity';
 import { CreditRequest, CreditRequestStatus } from '../credit-requests/entities/credit-request.entity';
 import { Transaction, TransactionType, TransactionStatus } from '../transactions/entities/transaction.entity';
 import { Payout, PayoutStatus } from '../payouts/entities/payout.entity';
-import { UpdateProfileDto } from './dto/update-profile.dto';
+import { UpdateProfileDto, isPlaceholderEmail } from './dto/update-profile.dto';
 import { VerifyIdentityDto } from './dto/verify-identity.dto';
 import { SudoApiService } from '../cards/sudo/sudo-api.service';
 import { ConfigService } from '@nestjs/config';
@@ -259,6 +259,23 @@ export class UsersService {
 
     if (!user) {
       throw new NotFoundException('User not found');
+    }
+
+    // TikTok sign-up users can set a real email once (for promo emails and recovery)
+    if (updateProfileDto.email !== undefined) {
+      const authType = user.authType ?? 'email';
+      if (authType !== 'tiktok') {
+        throw new BadRequestException('Only users who signed up with TikTok can set email here. Use account settings for email changes.');
+      }
+      if (!isPlaceholderEmail(user.email)) {
+        throw new BadRequestException('Email can only be set once. Contact support to change it.');
+      }
+      const existing = await User.findOne({ where: { email: updateProfileDto.email } });
+      if (existing && existing.id !== userId) {
+        throw new BadRequestException('This email is already in use.');
+      }
+      user.email = updateProfileDto.email.trim();
+      user.emailVerified = false; // optional: send verification later
     }
 
     // Update only provided fields

@@ -9,6 +9,7 @@ import { Sequelize } from 'sequelize-typescript';
 import { OnboardingRequest, OnboardingRequestStatus } from './entities/onboarding-request.entity';
 import { User, OnboardingStatus } from '../users/entities/user.entity';
 import { CreateOnboardingRequestDto } from './dto/create-onboarding-request.dto';
+import { isPlaceholderEmail } from '../users/dto/update-profile.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { Admin } from '../admins/entities/admin.entity';
@@ -46,27 +47,16 @@ export class OnboardingService {
       );
     }
 
-    // Get business rules settings
-    const businessRules = await this.settingsService.getSettingsByCategory('business-rules') as BusinessRulesSettings;
-
-    // Check if BVN or NIN is required
-    const requiresIdentity = businessRules.requireBvnForOnboarding || businessRules.requireNinForOnboarding;
-    
-    if (requiresIdentity) {
-      const identity = user.sudoCustomerOnboardingData?.identity;
-      const isVerified = identity?.verified === true;
-      
-      // User needs to have verified identity
-      if (!isVerified) {
-        const requiredDocs = [];
-        if (businessRules.requireBvnForOnboarding) requiredDocs.push('BVN');
-        if (businessRules.requireNinForOnboarding) requiredDocs.push('NIN');
-        
-        throw new BadRequestException(
-          `${requiredDocs.join(' or ')} verification is required for onboarding. Please verify your identity before submitting an onboarding request.`,
-        );
-      }
+    // TikTok sign-up users must set a real email first (for sending credentials and promo)
+    const authType = user.authType ?? 'email';
+    if (authType === 'tiktok' && isPlaceholderEmail(user.email)) {
+      throw new BadRequestException(
+        'Please add your email in your profile before requesting onboarding. We need it to send you credentials.',
+      );
     }
+
+    // Note: BVN/NIN is not required for admin onboarding request. Earnings-only users can request without KYC.
+    // NIN/BVN is required only when creating cards (prompted in card flow).
 
     // Check if user has a pending onboarding request
     const existingPendingRequest = await OnboardingRequest.findOne({

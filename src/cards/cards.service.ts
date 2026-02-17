@@ -124,7 +124,7 @@ export class CardsService {
 
       if (!onboardingData.onboardingCompleted) {
         throw new BadRequestException({
-          message: 'Please complete your profile setup before creating a card',
+          message: 'To create cards, complete your profile setup including NIN or BVN verification.',
           onboardingRequired: true,
         });
       }
