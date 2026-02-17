@@ -22,6 +22,7 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { AdminLoginDto } from './dto/admin-login.dto';
 import { SocialLoginDto } from './dto/social-login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { isPlaceholderEmail } from '../users/dto/update-profile.dto';
 
 export interface AuthResponse {
   token: string;
@@ -341,19 +342,7 @@ export class AuthService {
 
       return {
         ...tokens,
-        user: {
-          id: user.id,
-          email: user.email,
-          username: user.username || null,
-          firstName: user.firstName || null,
-          lastName: user.lastName || null,
-          phone: user.phone || null,
-          onboardingStatus: user.onboardingStatus,
-          earnings: parseFloat(user.earnings?.toString() || '0'),
-          wallet: parseFloat(user.wallet?.toString() || '0'),
-          balance: parseFloat(user.earnings?.toString() || '0'), // Backward compatibility
-          emailVerified: user.emailVerified,
-        },
+        user: this.toUserAuthResponse(user),
       };
     } catch (error) {
       // Log the error for debugging
@@ -530,11 +519,36 @@ export class AuthService {
         if (!user || user.status !== UserStatus.ACTIVE) {
           throw new UnauthorizedException('User account not found or inactive');
         }
-        return this.generateTokens(user.id, user.email, 'user');
+        const tokens = await this.generateTokens(user.id, user.email, 'user');
+        return { ...tokens, user: this.toUserAuthResponse(user) };
       }
     } catch (error) {
       throw new UnauthorizedException('Invalid refresh token');
     }
+  }
+
+  /**
+   * User object returned on login and refresh so frontend can branch on authType and needsEmail
+   * (e.g. TikTok sign-ups get add-email flow, not link TikTok).
+   */
+  private toUserAuthResponse(user: User): Record<string, any> {
+    const authType = user.authType ?? 'email';
+    const needsEmail = authType === 'tiktok' && isPlaceholderEmail(user.email);
+    return {
+      id: user.id,
+      email: user.email,
+      username: user.username || null,
+      firstName: user.firstName || null,
+      lastName: user.lastName || null,
+      phone: user.phone || null,
+      onboardingStatus: user.onboardingStatus,
+      earnings: parseFloat(user.earnings?.toString() || '0'),
+      wallet: parseFloat(user.wallet?.toString() || '0'),
+      balance: parseFloat(user.earnings?.toString() || '0'),
+      emailVerified: user.emailVerified,
+      authType,
+      needsEmail,
+    };
   }
 
   /**
