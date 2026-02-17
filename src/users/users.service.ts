@@ -167,6 +167,11 @@ export class UsersService {
         wallet: Number(user.wallet || 0),
         balance: Number(user.earnings || 0), // Backward compatibility
         emailVerified: user.emailVerified,
+        authType: user.authType ?? 'email',
+        needsEmail: (user.authType ?? 'email') === 'tiktok' && isPlaceholderEmail(user.email),
+        tiktokDisplayName: user.tiktokDisplayName ?? null,
+        tiktokAvatarUrl: user.tiktokAvatarUrl ?? null,
+        hasTikTok: !!user.tiktokOpenId,
       },
       creditRequest: {
         status: creditRequestStatus,
